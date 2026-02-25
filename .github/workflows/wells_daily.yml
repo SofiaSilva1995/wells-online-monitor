@@ -6,7 +6,7 @@ on:
   workflow_dispatch:         # Permite correr manualmente
 
 permissions:
-  contents: write            # ← permite fazer push ao repositório
+  contents: write
 
 jobs:
   run-monitor:
@@ -17,7 +17,7 @@ jobs:
       - name: Checkout repositório
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT_TOKEN }}
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -48,6 +48,7 @@ jobs:
         run: |
           git config user.name  "Wells Bot"
           git config user.email "wells-bot@github-actions"
+          git remote set-url origin https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }}
           git add logs/historico.csv known_oos_*.json 2>/dev/null || true
           git diff --staged --quiet || git commit -m "chore: histórico atualizado $(date +'%Y-%m-%d %H:%M')"
           git push

@@ -1,0 +1,49 @@
+name: Wells Online Monitor - Daily Run
+
+on:
+  schedule:
+    - cron: '0 14 * * *'   # 14:00 UTC = 15:00 Lisboa (Verão/WEST)
+  workflow_dispatch:         # Permite correr manualmente pelo GitHub
+
+jobs:
+  run-monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repositório
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependências
+        run: |
+          pip install requests beautifulsoup4 openpyxl playwright
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Criar config_email.py a partir dos Secrets
+        run: |
+          cat > config_email.py << PYEOF
+          SMTP_HOST = "smtp.gmail.com"
+          SMTP_PORT = 587
+          SMTP_USER = "${{ secrets.SMTP_USER }}"
+          SMTP_PASS = "${{ secrets.SMTP_PASS }}"
+          EMAIL_TO  = "${{ secrets.EMAIL_TO }}"
+          PYEOF
+
+      - name: Correr o bot
+        run: python wells_oos_monitor_ALL_BRANDS_AUTO_V4.py
+
+      - name: Guardar outputs como artefactos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wells-output-${{ github.run_id }}
+          path: |
+            outputs/
+            logs*/
+          retention-days: 30

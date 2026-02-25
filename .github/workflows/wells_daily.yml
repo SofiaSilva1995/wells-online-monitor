@@ -5,6 +5,9 @@ on:
     - cron: '0 14 * * *'   # 14:00 UTC = 15:00 Lisboa (Verão/WEST)
   workflow_dispatch:         # Permite correr manualmente
 
+permissions:
+  contents: write            # ← permite fazer push ao repositório
+
 jobs:
   run-monitor:
     runs-on: ubuntu-latest

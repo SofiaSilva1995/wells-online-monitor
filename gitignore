@@ -1,0 +1,21 @@
+# Credenciais — NUNCA fazer commit
+config_email.py
+
+# Outputs gerados automaticamente
+outputs/
+logs*/
+logs_avene/
+logs_ducray/
+logs_klorane/
+logs_rene_furterer/
+logs_aderma/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# Windows
+Thumbs.db
+desktop.ini

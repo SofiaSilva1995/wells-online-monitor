@@ -8,6 +8,9 @@ on:
         required: false
         default: ''
 
+permissions:
+  contents: write            # ← permite fazer push ao repositório
+
 jobs:
   send-dashboard:
     runs-on: ubuntu-latest
@@ -16,6 +19,8 @@ jobs:
     steps:
       - name: Checkout repositório
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Python
         uses: actions/setup-python@v5

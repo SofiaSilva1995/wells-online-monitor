@@ -1,0 +1,75 @@
+name: Wells Online Monitor - Daily Run
+
+on:
+  schedule:
+    - cron: '0 14 * * *'   # 14:00 UTC = 15:00 Lisboa (Verão/WEST)
+  workflow_dispatch:         # Permite correr manualmente
+
+# Garante que nunca correm duas instâncias deste workflow ao mesmo tempo
+concurrency:
+  group: wells-monitor
+  cancel-in-progress: false  # não cancela — espera que a anterior termine
+
+permissions:
+  contents: write
+
+jobs:
+  run-monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repositório
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependências
+        run: |
+          pip install requests beautifulsoup4 openpyxl playwright
+          playwright install chromium
+          playwright install-deps chromium
+
+      - name: Criar config_email.py a partir dos Secrets
+        run: |
+          cat > config_email.py << PYEOF
+          SMTP_HOST = "smtp.gmail.com"
+          SMTP_PORT = 587
+          SMTP_USER = "${{ secrets.SMTP_USER }}"
+          SMTP_PASS = "${{ secrets.SMTP_PASS }}"
+          EMAIL_TO  = "${{ secrets.EMAIL_TO }}"
+          PYEOF
+
+      - name: Correr o bot
+        run: python wells_oos_monitor_ALL_BRANDS_AUTO_V4.py
+
+      - name: Guardar histórico e known_oos no repositório
+        if: always()
+        run: |
+          git config user.name  "Wells Bot"
+          git config user.email "wells-bot@github-actions"
+          git remote set-url origin https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }}
+          mkdir -p logs outputs
+          git add -f logs/ outputs/ known_oos_*.json 2>/dev/null || true
+          git add -f logs/historico.csv 2>/dev/null || true
+          git status
+          git diff --staged --quiet && echo "Sem alterações para guardar" && exit 0
+          git commit -m "chore: histórico atualizado $(date +'%Y-%m-%d %H:%M')"
+          git pull --rebase origin main
+          git push
+
+      - name: Guardar outputs como artefactos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wells-output-${{ github.run_id }}
+          path: |
+            outputs/
+            logs*/
+          retention-days: 30

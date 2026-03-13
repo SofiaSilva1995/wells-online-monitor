@@ -330,8 +330,8 @@ td.url-col{max-width:100px}
     <div class="sub">Avène &nbsp;·&nbsp; Ducray &nbsp;·&nbsp; Klorane &nbsp;·&nbsp; René Furterer &nbsp;·&nbsp; A-Derma &nbsp;·&nbsp; Dexeryl &nbsp;·&nbsp; Oral Care &nbsp;·&nbsp; Wells.pt</div></div>
   </div>
   <div class="header-right">
-    Run <strong id="hRunId">20260313_221135Z</strong><br>
-    <span id="hDate">13/03/2026 22:39</span>
+    Run <strong id="hRunId">20260313_231842Z</strong><br>
+    <span id="hDate">13/03/2026 23:46</span>
   </div>
 </div>
 
@@ -392,9 +392,26 @@ td.url-col{max-width:100px}
 
   <div class="sec" id="secOos">Evolução Out of Stock <span class="sec-chev open" id="chevOos">▼</span></div>
   <div class="sec-body open" id="bodyOos"><div class="chart-card">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
       <h3 style="margin-bottom:0">Out of Stock por Dia e Marca</h3>
-      <button id="btnChartReset" style="padding:4px 14px;height:28px;border-radius:8px;background:var(--blue-pale);color:var(--blue);border:1.5px solid var(--blue-mid);font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;transition:background .15s">↺ Mostrar todas</button>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <select id="chartMonthFilter"
+          style="padding:4px 10px;height:28px;border-radius:8px;border:1.5px solid var(--blue-mid);
+                 background:var(--blue-pale);color:var(--blue);font-size:12px;font-weight:700;
+                 font-family:inherit;cursor:pointer;outline:none">
+          <option value="all">Todos os meses</option>
+        </select>
+        <button id="btnChartMTD"
+          style="padding:4px 12px;height:28px;border-radius:8px;background:var(--card);color:var(--muted);
+                 border:1.5px solid var(--line);font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;transition:all .15s">
+          MTD
+        </button>
+        <button id="btnChartReset"
+          style="padding:4px 14px;height:28px;border-radius:8px;background:var(--blue-pale);color:var(--blue);
+                 border:1.5px solid var(--blue-mid);font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;transition:background .15s">
+          ↺ Mostrar todas
+        </button>
+      </div>
     </div>
     <div class="chart-wrap"><canvas id="oosChart"></canvas></div>
   </div></div>
@@ -1059,7 +1076,7 @@ function resetNewOosFilter() {
 
 /* ── CHART ── */
 var _chart = null;
-function renderChart() {
+function renderChart(filteredDates) {
   var BRAND_COLORS_CHART = {
     "Avène":         "#FF8874",
     "Ducray":        "#007AB0",
@@ -1083,6 +1100,13 @@ function renderChart() {
   var allDates = [...new Set(allRows.map(function(r){ return r.data; }))].sort(function(a,b){
     return parseDate(a) > parseDate(b) ? 1 : -1;
   });
+
+  // Aplicar filtro de datas se fornecido
+  if (filteredDates && filteredDates.length) {
+    var filteredSet = new Set(filteredDates);
+    allDates = allDates.filter(function(d){ return filteredSet.has(d); });
+    allRows  = allRows.filter(function(r){ return filteredSet.has(r.data); });
+  }
 
   var brandData = {};
   marcas.forEach(function(m) {
@@ -1151,7 +1175,16 @@ function renderChart() {
       scales: {
         x: {
           grid: { color: "#f0f4f8" },
-          ticks: { font: { family: "DM Mono", size: 11 }, color: "#6b7a8d" }
+          ticks: {
+            font: { family: "DM Mono", size: 11 },
+            color: "#6b7a8d",
+            callback: function(value, index, ticks) {
+              var label = this.getLabelForValue(value);
+              if (!label) return label;
+              // "dd/mm/yyyy" → "dd"
+              return label.split("/")[0];
+            }
+          }
         },
         y: {
           beginAtZero: true,
@@ -1169,12 +1202,23 @@ function renderChart() {
 
 /* ── CHART RESET ── */
 document.getElementById("btnChartReset").addEventListener("click", function() {
-  if (!_chart) return;
-  var count = _chart.data.datasets.length;
-  for (var i = 0; i < count; i++) {
-    _chart.show(i);
+  // Resetar filtro de mês
+  var sel = document.getElementById("chartMonthFilter");
+  if (sel) sel.value = "all";
+  // Resetar botão MTD
+  var btnMTD = document.getElementById("btnChartMTD");
+  if (btnMTD) {
+    btnMTD.style.background = "var(--card)";
+    btnMTD.style.color = "var(--muted)";
+    btnMTD.style.borderColor = "var(--line)";
   }
-  _chart.update();
+  // Re-renderizar com todos os dados e todos os datasets visíveis
+  renderChart();
+  if (_chart) {
+    var count = _chart.data.datasets.length;
+    for (var i = 0; i < count; i++) { _chart.show(i); }
+    _chart.update();
+  }
 });
 document.getElementById("btnChartReset").addEventListener("mouseover", function() {
   this.style.background = "var(--blue-mid)";
@@ -1183,10 +1227,109 @@ document.getElementById("btnChartReset").addEventListener("mouseout", function()
   this.style.background = "var(--blue-pale)";
 });
 
+
+
+function applyChartMonthFilter() {
+  var sel = document.getElementById("chartMonthFilter");
+  var key = sel.value;
+  var btnMTD = document.getElementById("btnChartMTD");
+
+  // Reset estado MTD
+  btnMTD.style.background = "var(--card)";
+  btnMTD.style.color = "var(--muted)";
+  btnMTD.style.borderColor = "var(--line)";
+  btnMTD.style.fontWeight = "700";
+
+  if (key === "all") {
+    renderChart();
+  } else {
+    var dates = (window._chartMonthMap || {})[key] || [];
+    renderChart(dates);
+  }
+}
+
+function applyChartMTD() {
+  var now = new Date();
+  var curKey = now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2,"0");
+  var monthMap = window._chartMonthMap || {};
+
+  // Selecionar o mês atual no dropdown
+  var sel = document.getElementById("chartMonthFilter");
+  sel.value = monthMap[curKey] ? curKey : "all";
+
+  // Realçar botão MTD
+  var btnMTD = document.getElementById("btnChartMTD");
+  btnMTD.style.background = "var(--blue)";
+  btnMTD.style.color = "#fff";
+  btnMTD.style.borderColor = "var(--blue)";
+
+  if (monthMap[curKey]) {
+    // Filtrar só os dias do mês atual até hoje
+    var todayStr = String(now.getDate()).padStart(2,"0") + "/" +
+                   String(now.getMonth()+1).padStart(2,"0") + "/" +
+                   now.getFullYear();
+    var mtdDates = monthMap[curKey].filter(function(d) {
+      return parseDate(d) <= parseDate(todayStr);
+    });
+    renderChart(mtdDates);
+  } else {
+    renderChart();
+  }
+}
+
 /* ── BOOT ── */
 populateGlobal();
 render();
 renderChart();
+
+/* ── CHART MONTH FILTER — init depois do boot para parseDate estar disponível ── */
+(function() {
+  var allRows = (HIST && HIST.length > 0) ? HIST : DATA;
+  var dataKeys = new Set(DATA.map(function(r){ return r.data; }));
+  var histKeys = new Set(allRows.map(function(r){ return r.data; }));
+  dataKeys.forEach(function(d){ if(!histKeys.has(d)) allRows = allRows.concat(DATA.filter(function(r){ return r.data===d; })); });
+
+  var allDates = [...new Set(allRows.map(function(r){ return r.data; }))].sort(function(a,b){
+    return parseDate(a) > parseDate(b) ? 1 : -1;
+  });
+
+  var PT_MONTHS = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
+                   "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+  var seenMonths = [];
+  var monthMap = {};
+  allDates.forEach(function(d) {
+    var p = d.split("/");
+    if (p.length < 3) return;
+    var key = p[2] + "-" + p[1];
+    if (!monthMap[key]) { monthMap[key] = []; seenMonths.push(key); }
+    monthMap[key].push(d);
+  });
+
+  var sel = document.getElementById("chartMonthFilter");
+  seenMonths.forEach(function(key) {
+    var parts = key.split("-");
+    var label = PT_MONTHS[parseInt(parts[1],10)-1] + " " + parts[0];
+    var opt = document.createElement("option");
+    opt.value = key; opt.textContent = label;
+    sel.appendChild(opt);
+  });
+
+  window._chartMonthMap = monthMap;
+
+  // Realçar MTD se mês atual tem dados
+  var now = new Date();
+  var curKey = now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2,"0");
+  var btnMTD = document.getElementById("btnChartMTD");
+  if (monthMap[curKey]) {
+    btnMTD.style.borderColor = "var(--blue-mid)";
+    btnMTD.style.color = "var(--blue)";
+    btnMTD.style.background = "var(--blue-pale)";
+  }
+
+  // Ligar eventos aqui — funções já estão definidas neste ponto
+  document.getElementById("chartMonthFilter").addEventListener("change", applyChartMonthFilter);
+  document.getElementById("btnChartMTD").addEventListener("click", applyChartMTD);
+})();
 
 
 /* ── COLLAPSIBLE SECTIONS ── */

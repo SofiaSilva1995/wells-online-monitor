@@ -45,6 +45,20 @@ import config_email
 
 PER_PAGE = 24
 
+# ---------------------------------------------------------------------------
+# ALLOWLIST DE MARCAS PF — base para verificação anti-intruso em todas as marcas
+# ---------------------------------------------------------------------------
+PF_BRAND_ALLOWLIST = {
+    'avene', 'avène',
+    'ducray',
+    'klorane',
+    'rene furterer', 'rené furterer',
+    'a-derma', 'aderma', 'a derma',
+    'dexeryl',
+    'eludril', 'elgydium', 'elgydium clinic', 'arthrodont', 'elugel', 'parodium',
+    'pierre fabre', 'pierre fabre medicament', 'pierre fabre medic',
+}
+
 OOS_KEYWORDS = (
     "indisponivel",
     "indisponível",
@@ -431,6 +445,72 @@ def extract_ref(page, previous_ref: str = "") -> str:
     except Exception:
         pass
     return ""
+
+
+def extract_brand_from_page(page) -> str:
+    """
+    Extrai a marca do produto via schema.org JSON-LD (prioritário) ou DOM.
+    Retorna string vazia se não conseguir — nesse caso o produto não é rejeitado.
+    """
+    try:
+        result = page.evaluate("""
+        () => {
+            // 1. Schema.org JSON-LD — SFCC (Salesforce Commerce Cloud usado pelo Wells) injeta sempre
+            for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
+                try {
+                    const d = JSON.parse(s.textContent || '');
+                    const items = Array.isArray(d) ? d : [d];
+                    for (const item of items) {
+                        if (item && item['@type'] === 'Product' && item.brand) {
+                            const b = item.brand;
+                            const name = typeof b === 'string' ? b : (b.name || '');
+                            if (name.trim()) return name.trim();
+                        }
+                    }
+                } catch(e) {}
+            }
+            // 2. DOM — seletores comuns em SFCC/Wells
+            const sels = [
+                '.w-product-brand', '[class*="product-brand"]',
+                '[itemprop="brand"]', '.brand-name', 'a[href*="/marcas/"]'
+            ];
+            for (const sel of sels) {
+                const el = document.querySelector(sel);
+                if (el) {
+                    const txt = (el.innerText || el.textContent || '').trim();
+                    if (txt.length > 1 && txt.length < 60) return txt;
+                }
+            }
+            return '';
+        }
+        """)
+        return (result or '').strip()
+    except Exception:
+        return ''
+
+
+def is_pf_brand(brand_str: str) -> bool:
+    """
+    Verifica se a marca pertence a Pierre Fabre.
+    - True  → é PF ou não conseguiu determinar (benefício da dúvida → nunca rejeitar por precaução)
+    - False → identificada claramente como não-PF
+    """
+    if not brand_str:
+        return True  # Sem info → não rejeitar
+    import unicodedata as _ud
+    def _norm(s: str) -> str:
+        return ''.join(
+            c for c in _ud.normalize('NFD', s.lower().strip())
+            if _ud.category(c) != 'Mn'
+        )
+    brand_norm = _norm(brand_str)
+    for pf in PF_BRAND_ALLOWLIST:
+        pf_norm = _norm(pf)
+        if pf_norm in brand_norm or brand_norm in pf_norm:
+            return True
+    return False
+
+
 def extract_discount(page) -> str:
     """
     Extrai o desconto do produto (ex: '25%').
@@ -575,6 +655,23 @@ def check_product(page, url: str, brand_label: str) -> List[Dict]:
 
     try_accept_cookies(page)
     page.wait_for_timeout(600)
+
+    # ── Guarda anti-intruso: verifica se a página é um produto PF válido ──────
+    # 1. Página válida? Deve ter título de produto visível
+    try:
+        page.wait_for_selector(
+            'h1.w-product-name, h1[class*="product-name"], h1[class*="product-title"], h1',
+            timeout=4000
+        )
+    except Exception:
+        log(f"[SKIP] Sem título de produto (página inválida/404?): {final_url}")
+        return []
+
+    # 2. Marca correta? Lê via schema.org ou DOM e valida contra allowlist PF
+    page_brand = extract_brand_from_page(page)
+    if page_brand and not is_pf_brand(page_brand):
+        log(f"[INTRUSO] Rejeitado — marca '{page_brand}' não é Pierre Fabre: {final_url}")
+        return []
 
     # Aguarda elemento REF estar no DOM antes de extrair (até 3s)
     try:
@@ -976,30 +1073,40 @@ def _oos_worker(args: Tuple) -> List[Dict]:
     Worker top-level para verificacao OOS em paralelo.
     Usa check_product que devolve 1 linha por variante.
     Cada chamada lanca o seu proprio sync_playwright isolado.
+    Retry automático (até 2 tentativas) em caso de erro transitório de rede/timeout.
     """
     widx, wu, label, total_urls = args
-    try:
-        from playwright.sync_api import sync_playwright as _spw
-        with _spw() as _pw:
-            _br = _pw.chromium.launch(headless=True)
-            _ctx = _br.new_context(viewport={"width": 1365, "height": 900})
-            _pg = _ctx.new_page()
-            _pg.set_default_timeout(20000)   # 20s max por operacao
-            _pg.set_default_navigation_timeout(25000)  # 25s max por navegacao
-            try:
-                product_rows = check_product(_pg, wu, label)
-                oos_count = sum(r["is_oos"] for r in product_rows)
-                status = "OOS" if oos_count > 0 else "OK "
-                variants_info = f" ({len(product_rows)} variantes)" if len(product_rows) > 1 else ""
-                log(f"{label}: [{widx}/{total_urls}] {status}: {wu}{variants_info}")
-                return product_rows
-            finally:
-                try: _ctx.close()
-                except Exception: pass
-                try: _br.close()
-                except Exception: pass
-    except Exception as e:
-        log(f"{label}: [{widx}/{total_urls}] ERRO: {wu} -> {e}")
+    MAX_RETRIES = 2
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            from playwright.sync_api import sync_playwright as _spw
+            with _spw() as _pw:
+                _br = _pw.chromium.launch(headless=True)
+                _ctx = _br.new_context(viewport={"width": 1365, "height": 900})
+                _pg = _ctx.new_page()
+                _pg.set_default_timeout(25000)
+                _pg.set_default_navigation_timeout(30000)
+                try:
+                    product_rows = check_product(_pg, wu, label)
+                    oos_count = sum(r["is_oos"] for r in product_rows if isinstance(r.get("is_oos"), int))
+                    status = "OOS" if oos_count > 0 else ("SKIP" if not product_rows else "OK ")
+                    variants_info = f" ({len(product_rows)} variantes)" if len(product_rows) > 1 else ""
+                    log(f"{label}: [{widx}/{total_urls}] {status}: {wu}{variants_info}")
+                    return product_rows
+                finally:
+                    try: _ctx.close()
+                    except Exception: pass
+                    try: _br.close()
+                    except Exception: pass
+        except Exception as e:
+            err_str = str(e)
+            is_transient = any(k in err_str.lower() for k in ('timeout', 'net::', 'connection', 'reset', 'eof'))
+            if attempt < MAX_RETRIES and is_transient:
+                log(f"{label}: [{widx}/{total_urls}] RETRY {attempt}/{MAX_RETRIES-1} ({err_str[:80]}): {wu}")
+                import time; time.sleep(3 * attempt)
+            else:
+                log(f"{label}: [{widx}/{total_urls}] ERRO (tentativa {attempt}): {wu} -> {err_str[:120]}")
+                break
     return []
 
 
@@ -1129,42 +1236,29 @@ def run_brand(cfg: Dict, page) -> Dict:
                 all_urls_collected -= pinned_intruders
                 exclude_urls.update(pinned_intruders)
         
-        # FILTRO HÍBRIDO para Oral Care:
-        # O Wells filtra por marca (&prefn1=brand&prefv1=X), MAS pode retornar produtos relacionados
-        # Estratégia: CONFIAR no Wells, mas REJEITAR marcas conhecidas não-PF
-        
-        excluded_brands = [
-            # Maquilhagem
-            'lancome', 'nyx', 'it-cosmetics', 'cosmetics-do-it', 'do-it-all',
-            'loreal', 'maybelline', 'bourjois', 'rimmel',
-            'clinique', 'estee-lauder', 'mac', 'benefit',
-            # Perfumes/Luxo
-            'peachn-roses', 'idole', 'jelly-job', 'makeup',
-            'armani', 'giorgio-armani', 'acqua-di-gio',
-            'hugo-boss', 'boss-bottled', 'bottled-beyond',
-            # L'Oréal Grupo
-            'revitalift', 'loreal-paris', 'paris-revitalift',
-            'garnier', 'glass-skin',
-            # Dermocosméticos (não PF)
-            'nivea', 'dove', 'neutrogena',
-            'vichy', 'la-roche', 'bioderma', 'cerave',
+        # FILTRO URL para Oral Care:
+        # Pré-filtra URLs com slugs claramente não-PF antes de visitar cada página.
+        # A verificação definitiva é feita em check_product() via schema.org (is_pf_brand).
+        # Lista de slugs não-PF conhecidos — serve apenas como atalho para evitar visitas desnecessárias.
+        non_pf_url_slugs = [
+            'lancome', 'nyx', 'it-cosmetics', 'loreal', 'l-oreal', 'maybelline',
+            'bourjois', 'rimmel', 'clinique', 'estee-lauder', 'benefit',
+            'armani', 'giorgio-armani', 'hugo-boss', 'boss-bottled',
+            'revitalift', 'garnier',
+            'nivea', 'dove', 'neutrogena', 'vichy', 'la-roche', 'bioderma', 'cerave',
         ]
-        
+
         filtered_urls = set()
         for url in all_urls_collected:
             url_lower = url.lower()
-            
-            # Rejeita apenas marcas conhecidas não-PF
-            if any(excluded in url_lower for excluded in excluded_brands):
-                log(f"{label}: Produto rejeitado (marca não-PF): {url}")
+            if any(slug in url_lower for slug in non_pf_url_slugs):
+                log(f"{label}: URL pré-filtrada (slug não-PF): {url}")
                 continue
-            
-            # Aceita todo o resto (confia no filtro &prefn1=brand do Wells)
             filtered_urls.add(url)
-        
+
         rejected_count = len(all_urls_collected) - len(filtered_urls)
         if rejected_count > 0:
-            log(f"{label}: {rejected_count} produtos rejeitados (marcas não Pierre Fabre)")
+            log(f"{label}: {rejected_count} URLs pré-filtradas por slug — verificação final em check_product()")
         
         all_urls_collected = filtered_urls
         

@@ -2707,12 +2707,14 @@ $("kpi-total").addEventListener("click", function() {
 });
 
 $("kpi-oos").addEventListener("click", function() {
+  resetNewOosFilter();
   $("fEstado").value = "1"; $("fSoOos").checked = false;
   $("cf-estado").value = "1";
   page = 1; render(); scrollToTable();
 });
 
 $("kpi-ok").addEventListener("click", function() {
+  resetNewOosFilter();
   $("fEstado").value = "0"; $("fSoOos").checked = false;
   $("cf-estado").value = "0";
   page = 1; render(); scrollToTable();

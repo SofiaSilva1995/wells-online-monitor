@@ -2442,7 +2442,9 @@ function renderKPIs(rows) {
     if (!prevDate) return null;
     var prevRows = HIST.filter(function(r){ return r.data===prevDate; });
     if (!prevRows.length) return null;
-    return prevRows.filter(function(r){ return r.is_oos; }).length / prevRows.length * 100;
+    var prevTotal = prevRows.reduce(function(s,r){ return s+r.total; }, 0);
+    if (!prevTotal) return null;
+    return prevRows.reduce(function(s,r){ return s+r.oos; }, 0) / prevTotal * 100;
   })();
 
   var oosT = $("kOosTrend");
@@ -2492,7 +2494,7 @@ function renderBrands() {
           var prevDate = allDates[allDates.length-2];
           var prevRows = HIST.filter(function(r){return r.data===prevDate && r.marca===m;});
           if (!prevRows.length) return "";
-          var prevDayOos = prevRows.filter(function(r){return r.is_oos;}).length;
+          var prevDayOos = prevRows.reduce(function(s,r){return s+r.oos;},0);
           var diff = oos - prevDayOos;
           if (diff===0) return "<div style='font-size:11px;color:#888;margin-top:2px'>→ igual ao dia anterior</div>";
           return diff>0
@@ -2859,7 +2861,8 @@ function renderChart() {
   var brandData = {};
   marcas.forEach(function(m) {
     brandData[m] = allDates.map(function(d) {
-      return allRows.filter(function(r){ return r.marca===m && r.data===d && r.is_oos; }).length;
+      var row = allRows.find(function(r){ return r.marca===m && r.data===d; });
+      return row ? row.oos : 0;
     });
   });
 
@@ -2912,7 +2915,7 @@ function renderChart() {
             afterBody: function(items) {
               if (!items.length) return "";
               var dayLabel = items[0].label;
-              var total = allRows.filter(function(r){ return r.data === dayLabel; }).length;
+              var total = allRows.filter(function(r){ return r.data === dayLabel; }).reduce(function(s,r){ return s+r.total; }, 0);
               var totalOos = items.reduce(function(s,i){ return s + i.parsed.y; }, 0);
               if (!total) return "";
               return ["\n" + totalOos + " OOS de " + total + " (" + (totalOos/total*100).toFixed(1) + "%)"];
@@ -3305,28 +3308,37 @@ def generate_dashboard(run_id: str, all_results: list, output_path: str,
     # Data de hoje (para excluir do hist e usar só current_rows para hoje)
     _today_str = _dt.now().strftime("%d/%m/%Y")
 
-    hist_rows_for_chart = []
+    # Agrega por (dia, marca) — 1 linha por marca por dia em vez de 1 por variante
+    _hist_agg = {}
     for row in hist:
         day = row.get("data", "")
         run = row.get("run_id", "")
         key = (day, row.get("marca", ""))
-        # Exclui o dia de hoje do histórico — será adicionado via current_rows
         if day == _today_str:
             continue
-        # só inclui rows da ultima run desse dia
         if _seen_run_dates.get(key) == run:
-            hist_rows_for_chart.append({
-                "data":  day,
-                "marca": row.get("marca", ""),
-                "is_oos": int(row.get("is_oos", 0)),
-            })
-    # Adiciona run actual (hoje) — única fonte para hoje, sem duplicação
+            if key not in _hist_agg:
+                _hist_agg[key] = {"oos": 0, "total": 0}
+            _hist_agg[key]["total"] += 1
+            if int(row.get("is_oos", 0)):
+                _hist_agg[key]["oos"] += 1
+    # Agrega run actual (hoje)
+    _today_agg = {}
     for row in current_rows:
-        hist_rows_for_chart.append({
-            "data":  row.get("data", ""),
-            "marca": row.get("marca", ""),
-            "is_oos": row.get("is_oos", 0),
-        })
+        key = (row.get("data", ""), row.get("marca", ""))
+        if key not in _today_agg:
+            _today_agg[key] = {"oos": 0, "total": 0}
+        _today_agg[key]["total"] += 1
+        if row.get("is_oos"):
+            _today_agg[key]["oos"] += 1
+
+    hist_rows_for_chart = [
+        {"data": k[0], "marca": k[1], "oos": v["oos"], "total": v["total"]}
+        for k, v in _hist_agg.items()
+    ] + [
+        {"data": k[0], "marca": k[1], "oos": v["oos"], "total": v["total"]}
+        for k, v in _today_agg.items()
+    ]
 
     run_date = _dt.now().strftime("%d/%m/%Y %H:%M")
 

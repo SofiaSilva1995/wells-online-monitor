@@ -2,7 +2,7 @@ name: Wells Online Monitor - Daily Run
 
 on:
   schedule:
-    - cron: '0 14 * * *'   # 14:00 UTC = 15:00 Lisboa (Verão/WEST)
+    - cron: '0 6 * * *'   # 06:00 UTC = 07:00 Lisboa (Verão/WEST)
   workflow_dispatch:         # Permite correr manualmente
 
 env:
@@ -46,7 +46,6 @@ jobs:
       - name: Garantir que a pasta logs/ existe no repo
         run: |
           mkdir -p logs
-          # Cria ficheiros placeholder para que git track a pasta
           touch logs/.gitkeep
 
       - name: Correr o bot
@@ -58,15 +57,9 @@ jobs:
           git config user.name  "Wells Bot"
           git config user.email "wells-bot@github-actions"
           git remote set-url origin https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }}
-
-          # Adiciona tudo o que o bot gerou na pasta logs/
           git add logs/ 2>/dev/null || true
-          # Adiciona ficheiros de estado known_oos
           git add known_oos_*.json 2>/dev/null || true
-
-          # Só commita se houver alterações
-          git diff --staged --quiet && echo "Nada novo para commitar" || \
-            git commit -m "chore: run $(date +'%Y-%m-%d %H:%M') — histórico, dashboard e Excel atualizados"
+          git diff --staged --quiet && echo "Nada novo para commitar" ||             git commit -m "chore: run $(date +'%Y-%m-%d %H:%M') — histórico, dashboard e Excel atualizados"
           git push
 
       - name: Guardar outputs como artefactos

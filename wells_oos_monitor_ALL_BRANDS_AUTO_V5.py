@@ -2305,7 +2305,7 @@ function globalFiltered() {
   var dTo   = window._fpTo   && window._fpTo.selectedDates[0]   ? window._fpTo.selectedDates[0]   : null;
 
   return DATA.filter(function(r) {
-    if (_activeStore === "wells" && r.loja) return false;
+    if (_activeStore === "wells" && r.loja === "P&C") return false;
     if (_activeStore === "pc"    && r.loja !== "P&C") return false;
     if (fM && r.marca !== fM) return false;
     if (fE !== "" && String(r.is_oos) !== fE) return false;
@@ -2566,7 +2566,14 @@ function renderBrands() {
       card.addEventListener("click", function() {
         $("fMarca").value = ($("fMarca").value === brand) ? "" : brand;
         page = 1; render();
-        setTimeout(scrollToTable, 100);
+        // Garante que a secção Produtos está aberta antes de fazer scroll
+        var body = document.getElementById("bodyProdutos");
+        var chev = document.getElementById("chevProdutos");
+        if (body && !body.classList.contains("open")) {
+          body.classList.add("open");
+          if (chev) chev.classList.add("open");
+        }
+        setTimeout(scrollToTable, 150);
       });
     })(m);
     grid.appendChild(card);
@@ -2638,6 +2645,7 @@ function render() {
   renderKPIs(full);
   renderBrands();
   renderTable();
+  renderChart();
 }
 
 /* ── PAGINATION ── */
@@ -2649,7 +2657,8 @@ $("btnNext").addEventListener("click", function() {
   if (page < tp) { page++; renderTable(); scrollToTable(); }
 });
 function scrollToTable() {
-  window.scrollTo({top: document.querySelector(".table-card").offsetTop - 20, behavior:"smooth"});
+  var el = document.querySelector(".table-card");
+  if (el) el.scrollIntoView({behavior:"smooth", block:"start"});
 }
 
 /* ── KPI CLICKS ── */
@@ -2941,7 +2950,12 @@ function renderChart() {
     });
   });
 
-  var days = allDates;
+  // Formata labels: dd/mm para períodos diários; mm/aaaa para vista "all" (multi-ano)
+  var days = allDates.map(function(d) {
+    var p = d.split("/");
+    if (p.length !== 3) return d;
+    return (_activePeriod === "all") ? p[1] + "/" + p[2] : p[0] + "/" + p[1];
+  });
 
   var datasets = Object.keys(brandData).map(function(m) {
     return {

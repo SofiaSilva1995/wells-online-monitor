@@ -148,8 +148,12 @@ def _parse_tile(blk: str, data_str: str, label: str) -> Optional[Dict]:
     # ---- Stock ----
     # "data-add-cart-url" aparece no <a> de adicionar ao carrinho — ausente em OOS.
     # NÃO usar "add-to-cart" (string presente no nome da class wrapper do tile).
-    has_cart = "data-add-cart-url" in blk
-    has_notify = bool(re.search(r"notifiqu|esgotad|indispon|fora de stock", blk, re.I))
+    # has_notify restrito ao conteúdo ANTES do botão carrinho para evitar falsos
+    # positivos causados pelo modal global "Notifiquem-me!" no final da página.
+    cart_pos = blk.find("data-add-cart-url")
+    has_cart = cart_pos >= 0
+    search_limit = cart_pos if cart_pos > 0 else 15000
+    has_notify = bool(re.search(r"notifiqu|esgotad|indispon|fora de stock", blk[:search_limit], re.I))
     is_oos = has_notify or (not has_cart)
 
     # ---- Desconto ----

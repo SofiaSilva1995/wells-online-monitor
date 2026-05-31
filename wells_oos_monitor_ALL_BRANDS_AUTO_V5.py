@@ -2888,13 +2888,18 @@ function filterDataByPeriod(rows, period) {
 
 function renderChart() {
   var BRAND_COLORS_CHART = {
-    "Avène":         "#FF8874",
-    "Ducray":        "#007AB0",
-    "Klorane":       "#008000",
-    "René Furterer": "#111111",
-    "A-Derma":       "#99b445",
-    "Dexeryl":       "#6B0B16",
-    "Oral Care":     "#00878e"
+    "Avène":              "#FF8874",
+    "Ducray":             "#007AB0",
+    "Klorane":            "#008000",
+    "René Furterer":      "#111111",
+    "A-Derma":            "#99b445",
+    "Dexeryl":            "#6B0B16",
+    "Oral Care":          "#00878e",
+    "Avène (P&C)":        "#FF5533",
+    "Ducray (P&C)":       "#0099CC",
+    "Klorane (P&C)":      "#33AA33",
+    "René Furterer (P&C)":"#555555",
+    "A-Derma (P&C)":      "#BDD455"
   };
 
   // HIST is global
@@ -2909,7 +2914,22 @@ function renderChart() {
   // Aplica filtro de período
   allRows = filterDataByPeriod(allRows, _activePeriod);
 
-  var marcas = Object.keys(BRAND_COLORS_CHART);
+  // Filtro por loja — sincronizado com separadores Wells / P&C / Todos
+  if (_activeStore === "wells") {
+    allRows = allRows.filter(function(r){ return r.loja !== "P&C"; });
+  } else if (_activeStore === "pc") {
+    allRows = allRows.filter(function(r){ return r.loja === "P&C"; });
+  } else {
+    // "all": distinguir marcas com sufixo (P&C) para não sobrepor linhas
+    allRows = allRows.map(function(r){
+      return r.loja === "P&C" ? Object.assign({}, r, {marca: r.marca + " (P&C)"}) : r;
+    });
+  }
+
+  // Marcas presentes nos dados filtrados (na ordem do mapa de cores)
+  var marcas = Object.keys(BRAND_COLORS_CHART).filter(function(m){
+    return allRows.some(function(r){ return r.marca === m; });
+  });
   var allDates = [...new Set(allRows.map(function(r){ return r.data; }))].sort(function(a,b){
     return parseDate(a) > parseDate(b) ? 1 : -1;
   });
@@ -3255,7 +3275,7 @@ renderChart();
 # ---------------------------------------------------------------------------
 
 HISTORICO_CSV = os.path.join("logs", "historico.csv")
-HISTORICO_COLS = ["run_id", "data", "marca", "titulo", "url", "nome_variante",
+HISTORICO_COLS = ["run_id", "data", "loja", "marca", "titulo", "url", "nome_variante",
                   "is_oos", "oos_desde", "ref_produto", "desconto"]
 
 def load_historico() -> list:
@@ -3295,6 +3315,7 @@ def save_historico(run_id: str, all_rows: list, oos_desde_map: dict) -> None:
                 writer.writerow({
                     "run_id":        run_id,
                     "data":          row.get("data", ""),
+                    "loja":          row.get("loja", "Wells"),
                     "marca":         row.get("marca", ""),
                     "titulo":        row.get("titulo", ""),
                     "url":           row.get("url", ""),
@@ -3403,6 +3424,7 @@ def generate_dashboard(run_id: str, all_results: list, output_path: str,
         if _seen_run_dates.get(key) == run:
             hist_rows_for_chart.append({
                 "data":  day,
+                "loja":  row.get("loja", "Wells"),
                 "marca": row.get("marca", ""),
                 "is_oos": int(row.get("is_oos", 0)),
             })
@@ -3410,6 +3432,7 @@ def generate_dashboard(run_id: str, all_results: list, output_path: str,
     for row in current_rows:
         hist_rows_for_chart.append({
             "data":  row.get("data", ""),
+            "loja":  row.get("loja", "Wells"),
             "marca": row.get("marca", ""),
             "is_oos": row.get("is_oos", 0),
         })

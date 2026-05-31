@@ -44,14 +44,16 @@ except Exception:  # pragma: no cover
 # `label` TEM de coincidir com o label Wells para emparelhar por marca.
 # ---------------------------------------------------------------------------
 PC_BRANDS: List[Dict] = [
-    {"key": "pc_avene",         "label": "Avène",         "url": "https://www.perfumesecompanhia.pt/pt/marcas/avene/"},
-    {"key": "pc_a_derma",       "label": "A-Derma",       "url": "https://www.perfumesecompanhia.pt/pt/marcas/a-derma/"},
-    {"key": "pc_ducray",        "label": "Ducray",        "url": "https://www.perfumesecompanhia.pt/pt/marcas/ducray/"},
-    {"key": "pc_klorane",       "label": "Klorane",       "url": "https://www.perfumesecompanhia.pt/pt/marcas/klorane/"},
-    {"key": "pc_rene_furterer", "label": "René Furterer", "url": "https://www.perfumesecompanhia.pt/pt/marcas/rene-furterer/"},
+    {"key": "pc_avene",         "label": "Avène",         "url": "https://www.perfumesecompanhia.pt/pt/marcas/avene/",        "cgid": "AVENE"},
+    {"key": "pc_a_derma",       "label": "A-Derma",       "url": "https://www.perfumesecompanhia.pt/pt/marcas/a-derma/",      "cgid": "A-DERMA"},
+    {"key": "pc_ducray",        "label": "Ducray",        "url": "https://www.perfumesecompanhia.pt/pt/marcas/ducray/",       "cgid": "DUCRAY"},
+    {"key": "pc_klorane",       "label": "Klorane",       "url": "https://www.perfumesecompanhia.pt/pt/marcas/klorane/",      "cgid": "KLORANE"},
+    {"key": "pc_rene_furterer", "label": "René Furterer", "url": "https://www.perfumesecompanhia.pt/pt/marcas/rene-furterer/","cgid": "RENE FURTERER"},
 ]
 
 _BASE = "https://www.perfumesecompanhia.pt"
+_AJAX_BASE = f"{_BASE}/on/demandware.store/Sites-PC-Site/pt_PT/Search-UpdateGrid"
+_PAGE_SIZE = 24  # P&C sempre devolve 24 por página (ignoram sz != 24)
 
 _HEADERS = {
     "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -60,6 +62,8 @@ _HEADERS = {
     "Accept-Encoding": "gzip, deflate",   # evitar 'br' (bug de decode)
     "Accept-Language": "pt-PT,pt;q=0.9",
 }
+
+_HEADERS_AJAX = {**_HEADERS, "X-Requested-With": "XMLHttpRequest"}
 
 # Início de cada tile de produto na listagem
 _TILE_START_RE = re.compile(
@@ -142,7 +146,9 @@ def _parse_tile(blk: str, data_str: str, label: str) -> Optional[Dict]:
         return None
 
     # ---- Stock ----
-    has_cart = ("Cart-AddProduct" in blk) or ("add-to-cart" in blk)
+    # "data-add-cart-url" aparece no <a> de adicionar ao carrinho — ausente em OOS.
+    # NÃO usar "add-to-cart" (string presente no nome da class wrapper do tile).
+    has_cart = "data-add-cart-url" in blk
     has_notify = bool(re.search(r"notifiqu|esgotad|indispon|fora de stock", blk, re.I))
     is_oos = has_notify or (not has_cart)
 
@@ -169,19 +175,50 @@ def _parse_tile(blk: str, data_str: str, label: str) -> Optional[Dict]:
     }
 
 
-def scrape_pc_brand(label: str, url: str, max_pages: int = 20, sz: int = 100) -> List[Dict]:
-    """Devolve linhas (loja='P&C') para uma marca P&C, com paginação SFCC."""
+def _fetch_ajax(url: str, referer: str, timeout: int = 30) -> Optional[str]:
+    """GET AJAX com header X-Requested-With."""
+    if requests is None:
+        return None
+    try:
+        r = requests.get(url, headers={**_HEADERS_AJAX, "Referer": referer}, timeout=timeout)
+        if r.status_code != 200:
+            _log(f"HTTP {r.status_code} em {url}")
+            return None
+        return r.text
+    except Exception as e:
+        _log(f"ERRO fetch AJAX {url}: {e}")
+        return None
+
+
+def scrape_pc_brand(label: str, url: str, cgid: str, max_pages: int = 30) -> List[Dict]:
+    """Devolve linhas (loja='P&C') para uma marca P&C.
+
+    P&C usa SFCC com 'Carregar mais' via AJAX (Search-UpdateGrid).
+    O parâmetro start/sz na URL principal é ignorado pelo servidor — tem de
+    usar-se o endpoint AJAX para obter produtos além dos primeiros 24.
+    """
     data_str = datetime.now(timezone.utc).strftime("%d/%m/%Y")
-    _log(f"{label}: a ler {url}")
+    _log(f"{label}: a ler {url} (cgid={cgid})")
 
     rows: List[Dict] = []
-    seen_url = set()
-    seen_pid = set()
-    start = 0
-    for _ in range(max_pages):
-        sep = "&" if "?" in url else "?"
-        page_url = f"{url}{sep}start={start}&sz={sz}"
-        html = _fetch(page_url)
+    seen_url: set = set()
+
+    # Página 0: HTML completo da página da marca
+    html0 = _fetch(url)
+    if html0:
+        for blk in _split_tiles(html0):
+            row = _parse_tile(blk, data_str, label)
+            if row and row["url"] not in seen_url:
+                seen_url.add(row["url"])
+                rows.append(row)
+
+    # Páginas seguintes via endpoint AJAX
+    import urllib.parse as _up
+    cgid_enc = _up.quote(cgid)
+    for page in range(1, max_pages):
+        start = page * _PAGE_SIZE
+        ajax_url = f"{_AJAX_BASE}?cgid={cgid_enc}&start={start}&sz={_PAGE_SIZE}"
+        html = _fetch_ajax(ajax_url, referer=url)
         if not html:
             break
         tiles = _split_tiles(html)
@@ -190,20 +227,12 @@ def scrape_pc_brand(label: str, url: str, max_pages: int = 20, sz: int = 100) ->
         new_count = 0
         for blk in tiles:
             row = _parse_tile(blk, data_str, label)
-            if not row:
-                continue
-            key = row["url"]
-            if key in seen_url:
-                continue
-            seen_url.add(key)
-            pid_m = re.search(r'data-pid="(\d+)"', blk)
-            if pid_m:
-                seen_pid.add(pid_m.group(1))
-            rows.append(row)
-            new_count += 1
-        if new_count == 0 or len(tiles) < sz:
+            if row and row["url"] not in seen_url:
+                seen_url.add(row["url"])
+                rows.append(row)
+                new_count += 1
+        if new_count == 0:
             break
-        start += sz
 
     oos = sum(1 for r in rows if r["is_oos"])
     _log(f"{label}: {len(rows)} produtos | {oos} OOS | {len(rows) - oos} em stock")
@@ -216,7 +245,7 @@ def run_pc_all() -> List[Dict]:
     all_rows: List[Dict] = []
     for cfg in PC_BRANDS:
         try:
-            all_rows.extend(scrape_pc_brand(cfg["label"], cfg["url"]))
+            all_rows.extend(scrape_pc_brand(cfg["label"], cfg["url"], cfg["cgid"]))
         except Exception as e:
             _log(f"{cfg['label']}: FALHA geral: {e}")
     return all_rows
@@ -245,7 +274,7 @@ if __name__ == "__main__":
             targets = [b for b in PC_BRANDS if arg in b["key"] or arg in b["label"].lower()]
         out = []
         for cfg in targets:
-            out.extend(scrape_pc_brand(cfg["label"], cfg["url"]))
+            out.extend(scrape_pc_brand(cfg["label"], cfg["url"], cfg["cgid"]))
 
     print(f"\n===== TOTAL: {len(out)} produtos =====")
     by_brand = {}

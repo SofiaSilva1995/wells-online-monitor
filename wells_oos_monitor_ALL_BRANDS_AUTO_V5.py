@@ -3287,7 +3287,8 @@ def load_historico() -> list:
         with open(HISTORICO_CSV, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f, delimiter=";")
             for row in reader:
-                row["is_oos"] = int(row.get("is_oos", 0))
+                v = row.get("is_oos", "0")
+                row["is_oos"] = 1 if str(v).strip().lower() in ("1", "true") else 0
                 rows.append(row)
     except Exception as e:
         log(f"Erro ao carregar historico: {e}")

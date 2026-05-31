@@ -3421,6 +3421,81 @@ def generate_dashboard(run_id: str, all_results: list, output_path: str,
         f.write(html)
 
 
+PC_HEADERS = ["data", "loja", "marca", "titulo", "url", "nome_variante", "is_oos", "ref_produto", "desconto"]
+
+
+def build_pc_result(pc_rows: list, historico: list) -> dict:
+    """Converte rows brutas do pc_scraper no mesmo formato que run_brand() devolve."""
+    import unicodedata as _ud
+    label = "P&C"
+    state_dir = "state_pc_all"
+    logs_dir = "logs_pc_all"
+    ensure_dirs(state_dir, logs_dir)
+
+    known_json = os.path.join(state_dir, "oos_known.json")
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%SZ")
+    _date_fmt = datetime.now(timezone.utc).strftime("%d_%m_%Y")
+    run_xlsx = os.path.join(logs_dir, f"PC_{_date_fmt}.xlsx")
+
+    known_oos: set = load_known(known_json)
+
+    # Reconstruir estado anterior do histórico se não há state local
+    prev_state: dict = {}
+    if not prev_state and historico:
+        for row in historico:
+            url = row.get("url", "")
+            loja = row.get("loja", "")
+            if url and loja == "P&C":
+                prev_state[url] = bool(int(row.get("is_oos", 0)))
+
+    first_run = (len(known_oos) == 0 and len(prev_state) == 0)
+
+    current_oos: set = {r["url"] for r in pc_rows if r["is_oos"]}
+    all_urls: set = {r["url"] for r in pc_rows}
+
+    new_oos = current_oos - known_oos if not first_run else set()
+    recovered = (known_oos - current_oos) if not first_run else set()
+    removed_rows: list = []
+
+    save_known(known_json, current_oos)
+
+    # Marca rows com newly_oos para o dashboard
+    for row in pc_rows:
+        row["newly_oos"] = row["url"] in new_oos
+
+    # XLSX
+    rows_list = [[r[h] for h in PC_HEADERS] for r in pc_rows]
+    write_xlsx(run_xlsx, PC_HEADERS, rows_list)
+
+    current_count_variants = len(current_oos)
+    new_oos_count_variants = len(new_oos)
+    recovered_count_variants = len(recovered)
+
+    log(f"P&C: {len(pc_rows)} produtos | {current_count_variants} OOS | {new_oos_count_variants} NOVOS | {recovered_count_variants} RECUPERADOS")
+
+    return {
+        "label":                    label,
+        "first_run":                first_run,
+        "run_xlsx":                 run_xlsx,
+        "current_oos":              sorted(current_oos),
+        "new_oos":                  sorted(new_oos),
+        "recovered":                sorted(recovered),
+        "removed":                  [],
+        "removed_rows":             removed_rows,
+        "products_found":           len(all_urls),
+        "total_detected":           len(pc_rows),
+        "current_count":            len(current_oos),
+        "current_count_variants":   current_count_variants,
+        "new_count":                len(new_oos),
+        "new_count_variants":       new_oos_count_variants,
+        "recovered_count":          len(recovered),
+        "recovered_count_variants": recovered_count_variants,
+        "removed_count":            0,
+        "all_rows":                 pc_rows,
+        "headers":                  PC_HEADERS,
+    }
+
+
 def main() -> None:
     master_run_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%SZ")
     log(f"START | Monitor OOS Wells (ALL BRANDS) | run={master_run_id}")
@@ -3443,9 +3518,21 @@ def main() -> None:
 
         browser.close()
 
+    # --- P&C (Perfumes & Companhia) — não precisa Playwright ---
+    try:
+        from pc_scraper import run_pc_all
+        pc_rows = run_pc_all()
+        if pc_rows:
+            pc_result = build_pc_result(pc_rows, historico)
+            results.append(pc_result)
+        else:
+            log("P&C: nenhuma row obtida (scraper falhou ou site inacessível)")
+    except Exception as e:
+        log(f"ERRO P&C: {e}")
+
     send        = False
     attachments: List[str] = []
-    body_lines: List[str]  = ["Resumo da execucao (Wells Online):\n"]
+    body_lines: List[str]  = ["Resumo da execucao (Wells & P&C Online):\n"]
 
     # Agrega todas as rows da run actual
     all_current_rows = []
@@ -3514,7 +3601,7 @@ def main() -> None:
 
     if send:
         import shutil, tempfile
-        subject = f"Wells Online - Daily Monitor Update — {datetime.now(timezone.utc).strftime('%d/%m/%Y')}"
+        subject = f"Wells & P&C Online - Daily Monitor Update — {datetime.now(timezone.utc).strftime('%d/%m/%Y')}"
         body    = "\n".join(body_lines).strip() + "\n\nRelatorios Excel e Dashboard em anexo."
         uniq = []
         tmp_copies = []

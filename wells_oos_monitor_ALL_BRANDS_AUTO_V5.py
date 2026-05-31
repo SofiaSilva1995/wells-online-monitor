@@ -2132,7 +2132,7 @@ td.url-col{max-width:100px}
       <h3 style="margin-bottom:0">Out of Stock por Dia e Marca</h3>
       <div style="display:flex;align-items:center;gap:8px">
         <div style="display:flex;gap:6px;align-items:center">
-          <button class="period-btn active" data-period="all">Tudo</button>
+          <button class="period-btn" data-period="all">Tudo</button>
           <button class="period-btn" data-period="ytd">YTD</button>
           <select class="period-dropdown" id="periodYear" data-period="year">
             <option value="">Ano</option>
@@ -2884,7 +2884,7 @@ function resetNewOosFilter() {
 
 /* ── CHART ── */
 var _chart = null;
-var _activePeriod = "all"; // Período ativo: all, ytd, year, month
+var _activePeriod = "month"; // Período ativo: all, ytd, year, month
 
 function filterDataByPeriod(rows, period) {
   if (period === "all") return rows;
@@ -3085,8 +3085,10 @@ document.getElementById("btnChartReset").addEventListener("click", function() {
 });
 
 /* ── PERIOD FILTERS ── */
-var _selectedYear = null;
-var _selectedMonth = null;
+var _selectedYear  = new Date().getFullYear();
+var _selectedMonth = new Date().getMonth() + 1;
+document.getElementById("periodYear").value  = _selectedYear.toString();
+document.getElementById("periodMonth").value = ("0" + _selectedMonth).slice(-2);
 
 document.querySelectorAll(".period-btn").forEach(function(btn) {
   btn.addEventListener("click", function() {

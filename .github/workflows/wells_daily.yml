@@ -60,6 +60,7 @@ jobs:
           git add logs/ 2>/dev/null || true
           git add known_oos_*.json 2>/dev/null || true
           git diff --staged --quiet && echo "Nada novo para commitar" ||             git commit -m "chore: run $(date +'%Y-%m-%d %H:%M') — histórico, dashboard e Excel atualizados"
+          git pull --rebase origin main
           git push
 
       - name: Guardar outputs como artefactos

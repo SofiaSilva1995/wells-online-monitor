@@ -2009,6 +2009,31 @@ td.url-col{max-width:100px}
 .store-tab{padding:7px 20px;border-radius:20px;border:2px solid var(--blue);background:#fff;color:var(--blue);font-weight:700;font-size:13px;cursor:pointer;transition:all .15s}
 .store-tab.active{background:var(--blue);color:#fff}
 .store-tab:hover:not(.active){background:var(--blue-pale)}
+@media(max-width:768px){
+  .header{padding:12px 16px}
+  .header-right{display:none}
+  .wrap{padding:12px 14px 48px}
+  .kpi-grid{grid-template-columns:repeat(3,1fr);gap:10px}
+  .brand-grid{grid-template-columns:repeat(3,1fr);gap:8px}
+  .kpi-val{font-size:26px}
+  .bc-oos{font-size:22px}
+  .radar-inner{grid-template-columns:1fr;gap:16px}
+  .radar-band-row{grid-template-columns:75px 1fr 38px 38px;font-size:11px}
+  .store-tabs{flex-wrap:wrap;gap:6px}
+  .store-tab{padding:6px 14px;font-size:12px}
+  .chart-card{padding:14px 12px}
+  .fg{min-width:100px}
+}
+@media(max-width:480px){
+  .kpi-grid{grid-template-columns:repeat(2,1fr);gap:8px}
+  .brand-grid{grid-template-columns:repeat(2,1fr);gap:8px}
+  .kpi-val{font-size:22px}
+  .bc-oos{font-size:20px}
+  .radar-inner{grid-template-columns:1fr}
+  .tbl-head{flex-direction:column;align-items:flex-start}
+  .filter-bar{gap:8px}
+  .fg{min-width:calc(50% - 4px)}
+}
 </style>
 </head>
 <body>

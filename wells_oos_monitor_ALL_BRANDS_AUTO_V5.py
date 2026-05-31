@@ -2975,11 +2975,13 @@ function renderChart() {
     });
   });
 
-  // Formata labels: dd/mm para períodos diários; mm/aaaa para vista "all" (multi-ano)
+  // Formata labels: mm/aaaa só quando "all" com dados de múltiplos meses; senão dd/mm
+  var _uniqueMonths = new Set(allDates.map(function(d){ var p=d.split("/"); return p.length===3?p[1]+"/"+p[2]:d; }));
+  var _multiMonth = (_activePeriod === "all") && _uniqueMonths.size > 1;
   var days = allDates.map(function(d) {
     var p = d.split("/");
     if (p.length !== 3) return d;
-    return (_activePeriod === "all") ? p[1] + "/" + p[2] : p[0] + "/" + p[1];
+    return _multiMonth ? p[1] + "/" + p[2] : p[0] + "/" + p[1];
   });
 
   var datasets = Object.keys(brandData).map(function(m) {
@@ -3189,6 +3191,7 @@ renderChart();
     $("fMarca").value = "";
     page = 1;
     render();
+    window.renderRadar();
   });
 });
 
@@ -3202,78 +3205,9 @@ renderChart();
     {key:'50',  label:'50%',  color:'#071D47',test:function(d){return d==='50%';}},
   ];
   var BRANDS=['Avène','Ducray','Klorane','René Furterer','A-Derma','Dexeryl','Oral Care'];
+  var _discChart=null;
 
-  var bandTotals={},bandByBrand={},semDesc={},totalRows=0;
-  BANDS.forEach(function(b){bandTotals[b.key]=0;bandByBrand[b.key]={};});
-  DATA.forEach(function(r){
-    totalRows++;
-    var d=r.desconto||'';
-    if(!d||d==='Sem desconto'){semDesc[r.marca]=(semDesc[r.marca]||0)+1;return;}
-    BANDS.forEach(function(b){if(b.test(d)){bandTotals[b.key]++;bandByBrand[b.key][r.marca]=(bandByBrand[b.key][r.marca]||0)+1;}});
-  });
-
-  document.getElementById('rdcTotal').textContent=totalRows;
-  document.getElementById('discTotal').textContent=totalRows+' produtos analisados';
-
-  var maxBand=Math.max.apply(null,BANDS.map(function(b){return bandTotals[b.key]||0;}));
-
-  /* Donut */
-  var ctx=document.getElementById('discChart').getContext('2d');
-  new Chart(ctx,{
-    type:'doughnut',
-    data:{labels:BANDS.map(function(b){return b.label;}),datasets:[{
-      data:BANDS.map(function(b){return bandTotals[b.key];}),
-      backgroundColor:BANDS.map(function(b){return b.color;}),
-      borderWidth:3,borderColor:'#fff',hoverOffset:10
-    }]},
-    options:{responsive:true,maintainAspectRatio:false,cutout:'68%',
-      plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){
-        var pct=((c.parsed/totalRows)*100).toFixed(1);
-        return ' '+c.parsed+' produtos ('+pct+'%) — clica para filtrar';
-      }}}},
-      onClick:function(evt,elements){
-        if(!elements||!elements.length)return;
-        applyRadarFilter(BANDS[elements[0].index]);
-      }
-    }
-  });
-
-  /* Band rows */
-  var bandsEl=document.getElementById('radarBands');
-  BANDS.forEach(function(b){
-    var n=bandTotals[b.key],pct=((n/totalRows)*100).toFixed(1);
-    var fillW=maxBand>0?Math.round((n/maxBand)*100):0;
-    var pips=BRANDS.filter(function(br){return bandByBrand[b.key][br]>0;})
-      .map(function(br){return '<span class="radar-brand-pip"><span style="width:6px;height:6px;border-radius:50%;background:'+(BRAND_COLORS[br]||'#999')+';display:inline-block"></span>'+br.split(' ')[0]+'&nbsp;'+bandByBrand[b.key][br]+'</span>';}).join('');
-    var row=document.createElement('div');
-    row.className='radar-band-row radar-band-clickable';
-    row.setAttribute('data-band-key',b.key);
-    row.innerHTML='<div class="radar-band-label"><div class="radar-band-dot" style="background:'+b.color+'"></div>'+b.label+'</div>'+
-      '<div><div class="radar-track"><div class="radar-fill" style="width:'+fillW+'%;background:'+b.color+'"></div></div>'+(pips?'<div class="radar-brand-mini">'+pips+'</div>':'')+
-      '</div><div class="radar-count" style="color:'+b.color+'">'+n+'</div>'+
-      '<div class="radar-pct">'+pct+'% <span class="radar-filter-icon">↗</span></div>';
-    (function(band,rowEl){rowEl.addEventListener('click',function(){applyRadarFilter(band);});})(b,row);
-    bandsEl.appendChild(row);
-  });
-
-  /* Sem desconto callout */
-  var semDescTotal=Object.values(semDesc).reduce(function(a,v){return a+v;},0);
-  if(semDescTotal>0){
-    var brandList=Object.entries(semDesc).sort(function(a,b){return b[1]-a[1];})
-      .map(function(e){return e[0].split(' ')[0]+' ('+e[1]+')';}).join(' · ');
-    var el=document.getElementById('radarSemDesc');
-    el.innerHTML='<div class="radar-sem-desc" style="cursor:pointer" title="Clica para filtrar produtos sem desconto">'+
-      '<span class="radar-sem-desc-icon">⚠️</span>'+
-      '<div><div class="radar-sem-desc-text">'+semDescTotal+' produtos sem desconto registado</div>'+
-      '<div class="radar-sem-desc-brands">'+brandList+'</div></div>'+
-      '<span style="margin-left:auto;font-size:11px;color:#e65100;font-weight:700">Ver na tabela ↗</span></div>';
-    el.firstChild.addEventListener('click',function(){
-      clearAllFilters(); _semDescontoFilter=true;
-      showRadarBtn(true); page=1; renderTable(); setTimeout(scrollToTable,150);
-    });
-  }
-
-  /* Shared helpers */
+  /* Helpers definidos uma vez */
   window._radarBandFilter=null;
   function showRadarBtn(show){var b=document.getElementById('btnRadarReset');if(b)b.style.display=show?'':'none';}
   function clearAllFilters(){
@@ -3300,6 +3234,91 @@ renderChart();
   document.getElementById('btnRadarReset').addEventListener('click',function(){
     window._clearRadarFilter(); page=1; renderTable();
   });
+
+  window.renderRadar=function(){
+    /* Filtra DATA pelo separador activo */
+    var rows=DATA.filter(function(r){
+      if(_activeStore==="wells") return r.loja!=="P&C";
+      if(_activeStore==="pc") return r.loja==="P&C";
+      return true;
+    });
+
+    var bandTotals={},bandByBrand={},semDesc={},totalRows=0;
+    BANDS.forEach(function(b){bandTotals[b.key]=0;bandByBrand[b.key]={};});
+    rows.forEach(function(r){
+      totalRows++;
+      var d=r.desconto||'';
+      if(!d||d==='Sem desconto'){semDesc[r.marca]=(semDesc[r.marca]||0)+1;return;}
+      BANDS.forEach(function(b){if(b.test(d)){bandTotals[b.key]++;bandByBrand[b.key][r.marca]=(bandByBrand[b.key][r.marca]||0)+1;}});
+    });
+
+    document.getElementById('rdcTotal').textContent=totalRows;
+    document.getElementById('discTotal').textContent=totalRows+' produtos analisados';
+
+    var maxBand=Math.max.apply(null,BANDS.map(function(b){return bandTotals[b.key]||0;}));
+
+    /* Donut — destroi instância anterior */
+    if(_discChart){_discChart.destroy();_discChart=null;}
+    var ctx=document.getElementById('discChart').getContext('2d');
+    _discChart=new Chart(ctx,{
+      type:'doughnut',
+      data:{labels:BANDS.map(function(b){return b.label;}),datasets:[{
+        data:BANDS.map(function(b){return bandTotals[b.key];}),
+        backgroundColor:BANDS.map(function(b){return b.color;}),
+        borderWidth:3,borderColor:'#fff',hoverOffset:10
+      }]},
+      options:{responsive:true,maintainAspectRatio:false,cutout:'68%',
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:function(c){
+          var pct=((c.parsed/totalRows)*100).toFixed(1);
+          return ' '+c.parsed+' produtos ('+pct+'%) — clica para filtrar';
+        }}}},
+        onClick:function(evt,elements){
+          if(!elements||!elements.length)return;
+          applyRadarFilter(BANDS[elements[0].index]);
+        }
+      }
+    });
+
+    /* Band rows — limpa e repopula */
+    var bandsEl=document.getElementById('radarBands');
+    bandsEl.innerHTML='';
+    BANDS.forEach(function(b){
+      var n=bandTotals[b.key],pct=((n/totalRows)*100).toFixed(1);
+      var fillW=maxBand>0?Math.round((n/maxBand)*100):0;
+      var pips=BRANDS.filter(function(br){return bandByBrand[b.key][br]>0;})
+        .map(function(br){return '<span class="radar-brand-pip"><span style="width:6px;height:6px;border-radius:50%;background:'+(BRAND_COLORS[br]||'#999')+';display:inline-block"></span>'+br.split(' ')[0]+'&nbsp;'+bandByBrand[b.key][br]+'</span>';}).join('');
+      var row=document.createElement('div');
+      row.className='radar-band-row radar-band-clickable';
+      row.setAttribute('data-band-key',b.key);
+      row.innerHTML='<div class="radar-band-label"><div class="radar-band-dot" style="background:'+b.color+'"></div>'+b.label+'</div>'+
+        '<div><div class="radar-track"><div class="radar-fill" style="width:'+fillW+'%;background:'+b.color+'"></div></div>'+(pips?'<div class="radar-brand-mini">'+pips+'</div>':'')+
+        '</div><div class="radar-count" style="color:'+b.color+'">'+n+'</div>'+
+        '<div class="radar-pct">'+pct+'% <span class="radar-filter-icon">↗</span></div>';
+      (function(band,rowEl){rowEl.addEventListener('click',function(){applyRadarFilter(band);});})(b,row);
+      bandsEl.appendChild(row);
+    });
+
+    /* Sem desconto callout — limpa e repopula */
+    var semDescTotal=Object.values(semDesc).reduce(function(a,v){return a+v;},0);
+    var semDescEl=document.getElementById('radarSemDesc');
+    semDescEl.innerHTML='';
+    if(semDescTotal>0){
+      var brandList=Object.entries(semDesc).sort(function(a,b){return b[1]-a[1];})
+        .map(function(e){return e[0].split(' ')[0]+' ('+e[1]+')';}).join(' · ');
+      semDescEl.innerHTML='<div class="radar-sem-desc" style="cursor:pointer" title="Clica para filtrar produtos sem desconto">'+
+        '<span class="radar-sem-desc-icon">⚠️</span>'+
+        '<div><div class="radar-sem-desc-text">'+semDescTotal+' produtos sem desconto registado</div>'+
+        '<div class="radar-sem-desc-brands">'+brandList+'</div></div>'+
+        '<span style="margin-left:auto;font-size:11px;color:#e65100;font-weight:700">Ver na tabela ↗</span></div>';
+      semDescEl.firstChild.addEventListener('click',function(){
+        clearAllFilters(); _semDescontoFilter=true;
+        showRadarBtn(true); page=1; renderTable(); setTimeout(scrollToTable,150);
+      });
+    }
+  };
+
+  /* Render inicial */
+  window.renderRadar();
 })();
 
 })();

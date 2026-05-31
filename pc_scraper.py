@@ -174,7 +174,7 @@ def _parse_tile(blk: str, data_str: str, label: str) -> Optional[Dict]:
         "url":           url,
         "nome_variante": "",
         "is_oos":        is_oos,
-        "ref_produto":   sku or pid,
+        "ref_produto":   pid,
         "desconto":      desconto,
     }
 

@@ -3449,10 +3449,16 @@ def generate_dashboard(run_id: str, all_results: list, output_path: str,
             "data":  row.get("data", ""),
             "loja":  row.get("loja", "Wells"),
             "marca": row.get("marca", ""),
-            "is_oos": row.get("is_oos", 0),
+            "is_oos": 1 if row.get("is_oos") else 0,
         })
 
     run_date = _dt.now().strftime("%d/%m/%Y %H:%M")
+
+    # Normaliza is_oos para int 0/1 em current_rows antes do JSON
+    # (pc_scraper devolve bool Python True/False; Wells devolve int 0/1;
+    #  o JS usa String(r.is_oos)==="1" nos filtros, que falha com "true")
+    for row in current_rows:
+        row["is_oos"] = 1 if row.get("is_oos") else 0
 
     # NOVOS OOS: apenas produtos com oos_desde == data de hoje (0 dias de OOS)
     _today_str = _dt.now().strftime("%d/%m/%Y")

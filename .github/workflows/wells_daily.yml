@@ -2,7 +2,7 @@ name: Wells Online Monitor - Daily Run
 
 on:
   schedule:
-    - cron: '0 4 * * *'   # 04:00 UTC = 05:00 Lisboa nominal → chega ~07:00 Lisboa real (GitHub Actions atrasa ~2h)
+    - cron: '0 2 * * *'   # 02:00 UTC = 03:00 Lisboa nominal → chega ~07:00 Lisboa real (GitHub Actions atrasa ~2-5h)
   workflow_dispatch:         # Permite correr manualmente
 
 env:

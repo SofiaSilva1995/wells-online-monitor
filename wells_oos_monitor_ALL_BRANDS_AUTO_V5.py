@@ -3664,12 +3664,18 @@ def main() -> None:
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(viewport={"width": 1365, "height": 900})
         page    = context.new_page()
+        page.set_default_navigation_timeout(60000)  # 60s para lidar com wells.pt lento
 
         for cfg in BRANDS:
             try:
                 results.append(run_brand(cfg, page, historico))
             except Exception as e:
                 log(f"ERRO em {cfg.get('label', cfg.get('key'))}: {e}")
+                log(f"A tentar novamente {cfg.get('label', cfg.get('key'))}...")
+                try:
+                    results.append(run_brand(cfg, page, historico))
+                except Exception as e2:
+                    log(f"ERRO (2ª tentativa) em {cfg.get('label', cfg.get('key'))}: {e2}")
 
         browser.close()
 

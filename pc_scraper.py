@@ -156,6 +156,11 @@ def _parse_tile(blk: str, data_str: str, label: str) -> Optional[Dict]:
     has_notify = bool(re.search(r"notifiqu|esgotad|indispon|fora de stock", blk[:search_limit], re.I))
     is_oos = has_notify or (not has_cart)
 
+    # ---- Variante/tamanho ----
+    # O botão seleccionado tem class="...selected..."; extrai o data-attr-value desse botão.
+    sel_v = re.search(r'class="[^"]*\bselected\b[^"]*"[^>]*data-attr-value="([^"]+)"', blk)
+    nome_variante = sel_v.group(1).strip() if sel_v else ""
+
     # ---- Desconto ----
     desconto = "Sem desconto"
     try:
@@ -172,7 +177,7 @@ def _parse_tile(blk: str, data_str: str, label: str) -> Optional[Dict]:
         "marca":         label,
         "titulo":        name,
         "url":           url,
-        "nome_variante": "",
+        "nome_variante": nome_variante,
         "is_oos":        is_oos,
         "ref_produto":   pid,
         "desconto":      desconto,

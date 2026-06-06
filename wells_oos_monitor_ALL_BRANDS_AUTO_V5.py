@@ -3338,15 +3338,46 @@ HISTORICO_CSV = os.path.join("logs", "historico.csv")
 HISTORICO_COLS = ["run_id", "data", "loja", "marca", "titulo", "url", "nome_variante",
                   "is_oos", "oos_desde", "ref_produto", "desconto"]
 
+_LOJAS_SET = {"Wells", "P&C"}
+
 def load_historico() -> list:
     """Carrega todo o historico de runs anteriores."""
     if not os.path.exists(HISTORICO_CSV):
         return []
     rows = []
     try:
+        # Detecta se o cabeçalho CSV tem coluna "loja" (formato novo, 11 cols)
+        # ou não (formato antigo, 10 cols sem loja).
+        # Bug: quando "loja" foi adicionado a HISTORICO_COLS mas o CSV já existia,
+        # o cabeçalho ficou antigo e as colunas das rows novas ficaram shifted:
+        #   col2 = loja value → lido como "marca"
+        #   col3 = marca value → lido como "titulo"  etc.
+        with open(HISTORICO_CSV, "r", encoding="utf-8") as f:
+            header_line = f.readline().strip()
+        has_loja_col = "loja" in header_line.split(";")
+
         with open(HISTORICO_CSV, "r", encoding="utf-8") as f:
             reader = csv.DictReader(f, delimiter=";")
             for row in reader:
+                if not has_loja_col:
+                    if row.get("marca") in _LOJAS_SET:
+                        # Row com 11 cols mas lida com cabeçalho de 10 cols:
+                        # repor o shift — cada campo está 1 posição à direita do esperado.
+                        row["loja"]          = row.get("marca", "")
+                        row["marca"]         = row.get("titulo", "")
+                        row["titulo"]        = row.get("url", "")
+                        row["url"]           = row.get("nome_variante", "")
+                        row["nome_variante"] = row.get("is_oos", "")
+                        real_is_oos          = row.get("oos_desde", "0")
+                        row["oos_desde"]     = row.get("ref_produto", "")
+                        row["ref_produto"]   = row.get("desconto", "")
+                        # campo extra (desconto real) fica no restkey None do DictReader
+                        extra = row.get(None, [])
+                        row["desconto"]      = extra[0] if isinstance(extra, list) and extra else (extra or "")
+                        row["is_oos"]        = real_is_oos
+                    else:
+                        # Row antiga (10 cols, só Wells): colunas correctas, apenas falta loja
+                        row.setdefault("loja", "Wells")
                 v = row.get("is_oos", "0")
                 row["is_oos"] = 1 if str(v).strip().lower() in ("1", "true") else 0
                 rows.append(row)

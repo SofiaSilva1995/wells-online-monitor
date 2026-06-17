@@ -68,7 +68,7 @@ BRANDS: List[Dict] = [
         }
     },
     {"key": "ducray",       "label": "Ducray",       "base_url": "https://wells.pt/marcas/ducray",       "max_pages_fallback": 10, "exclude_urls": set(), "brand_filter": ["ducray"]},
-    {"key": "klorane",      "label": "Klorane",      "base_url": "https://wells.pt/marcas/k/klorane",      "max_pages_fallback": 12, "exclude_urls": set()},
+    {"key": "klorane",      "label": "Klorane",      "base_url": "https://wells.pt/marcas/k/klorane",      "max_pages_fallback": 12, "exclude_urls": set(), "brand_filter": ["klorane"]},
     {"key": "rene_furterer","label": "René Furterer","base_url": "https://wells.pt/marcas/rene-furterer","max_pages_fallback": 12, "exclude_urls": set(), "brand_filter": ["rene furterer", "rene-furterer", "rene furtere"]},
     {"key": "a_derma",      "label": "A-Derma",      "base_url": "https://wells.pt/marcas/a-derma",      "max_pages_fallback": 10, "exclude_urls": set(), "brand_filter": ["a-derma", "aderma"]},
     {

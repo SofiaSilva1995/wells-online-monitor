@@ -60,6 +60,7 @@ BRANDS: List[Dict] = [
         "label": "Avène",
         "base_url": "https://wells.pt/avene.html",
         "max_pages_fallback": 60,
+        "brand_filter": ["avene", "avène"],
         "exclude_urls": {
             "https://wells.pt/ultra-facial-meltdown-recovery-cream-446915.html",
             "https://wells.pt/ella-ella-flora-azura-eau-de-parfum-446720.html",
@@ -1147,7 +1148,7 @@ def run_brand(cfg: Dict, page, historico: list = None) -> Dict:
                     page.wait_for_timeout(600)
                     
                     # Primeira página
-                    sub_urls = extract_urls_from_dom(page, label, exclude_urls, expected_min=5)
+                    sub_urls = extract_urls_from_dom(page, label, exclude_urls, expected_min=5, brand_filter=brand_filter)
                     
                     # Rastreia URLs desta sub-marca
                     urls_by_subbrand[sub_name] = set(sub_urls)
@@ -1170,7 +1171,7 @@ def run_brand(cfg: Dict, page, historico: list = None) -> Dict:
                                 try_accept_cookies(page)
                                 page.wait_for_timeout(400)
                                 
-                                page_urls = extract_urls_from_dom(page, label, exclude_urls)
+                                page_urls = extract_urls_from_dom(page, label, exclude_urls, brand_filter=brand_filter)
                                 if page_urls:
                                     urls_by_subbrand[sub_name].update(page_urls)
                                     all_urls_collected.update(page_urls)
@@ -1320,7 +1321,7 @@ def run_brand(cfg: Dict, page, historico: list = None) -> Dict:
             before = len(all_urls)
 
             # Recolhe URLs base desta pagina
-            page_urls = extract_urls_from_dom(page, label, exclude_urls, expected_min=expected_min)
+            page_urls = extract_urls_from_dom(page, label, exclude_urls, expected_min=expected_min, brand_filter=brand_filter)
 
             if pnum == 1:
                 # Guarda URLs da pagina 1 - ainda nao adicionamos a all_urls

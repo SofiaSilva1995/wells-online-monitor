@@ -83,14 +83,16 @@ BRANDS: List[Dict] = [
             {"name": "Parodium",   "url": "https://wells.pt/gel-gengival-3065953.html", "single_product": True},
         ],
         "max_pages_fallback": 10,
-        "exclude_urls": set()
+        "exclude_urls": set(),
+        "brand_filter": ["eludril", "elgydium", "arthrodont", "elugel", "parodium"]
     },
     {
         "key": "dexeryl",
         "label": "Dexeryl",
         "base_url": "https://wells.pt/resultados-pesquisa-wells?q=DEXERYL&prefn1=brand&prefv1=Dexeryl",
         "max_pages_fallback": 10,
-        "exclude_urls": set()
+        "exclude_urls": set(),
+        "brand_filter": ["dexeryl"]
     },
 ]
 

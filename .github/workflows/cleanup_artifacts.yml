@@ -1,0 +1,35 @@
+name: Limpeza de Artifacts Expirados
+
+on:
+  schedule:
+    - cron: '0 3 * * 0'   # Todos os domingos às 03:00 UTC
+  workflow_dispatch:        # Permite correr manualmente
+
+permissions:
+  actions: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apagar artifacts expirados que o GitHub não limpou sozinho
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPO="${{ github.repository }}"
+          PAGE=1
+          TOTAL_APAGADOS=0
+          while : ; do
+            RESP=$(gh api "repos/$REPO/actions/artifacts?per_page=100&page=$PAGE")
+            COUNT=$(echo "$RESP" | jq '.artifacts | length')
+            if [ "$COUNT" -eq 0 ]; then
+              break
+            fi
+            IDS=$(echo "$RESP" | jq -r '.artifacts[] | select(.expired == true) | .id')
+            for ID in $IDS; do
+              echo "A apagar artifact expirado $ID"
+              gh api -X DELETE "repos/$REPO/actions/artifacts/$ID" && TOTAL_APAGADOS=$((TOTAL_APAGADOS+1))
+            done
+            PAGE=$((PAGE+1))
+          done
+          echo "Total de artifacts expirados apagados: $TOTAL_APAGADOS"

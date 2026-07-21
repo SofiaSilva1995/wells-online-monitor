@@ -71,4 +71,4 @@ jobs:
           path: |
             logs/
             logs_consolidado/
-          retention-days: 30
+          retention-days: 7

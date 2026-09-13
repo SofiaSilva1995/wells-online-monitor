@@ -3766,7 +3766,10 @@ def main() -> None:
     if send:
         import shutil, tempfile
         subject = f"Wells & P&C Online - Daily Monitor Update — {datetime.now(timezone.utc).strftime('%d/%m/%Y')}"
-        body    = "\n".join(body_lines).strip() + "\n\nRelatorios Excel e Dashboard em anexo."
+        # Dashboard deixou de ir em anexo: cresce com o historico completo (>10MB),
+        # o que faz o email ser rejeitado/nao entregue. Fica so no repo, com link.
+        _dashboard_link = "https://htmlpreview.github.io/?https://raw.githubusercontent.com/SofiaSilva1995/wells-online-monitor/main/logs/dashboard_latest.html"
+        body = "\n".join(body_lines).strip() + f"\n\nRelatorios Excel em anexo.\nDashboard atualizado: {_dashboard_link}"
         uniq = []
         tmp_copies = []
         _tmp_dir = tempfile.mkdtemp()
@@ -3778,15 +3781,7 @@ def main() -> None:
                 uniq.append(dest); tmp_copies.append(dest)
             except Exception:
                 uniq.append(consolidated_xlsx)
-        # 2. Dashboard HTML — nome correcto (ex: Dashboard_Update_26_02_2026.html)
-        if dashboard_html and os.path.exists(dashboard_html):
-            try:
-                dest = os.path.join(_tmp_dir, os.path.basename(dashboard_html))
-                shutil.copy2(dashboard_html, dest)
-                uniq.append(dest); tmp_copies.append(dest)
-            except Exception:
-                uniq.append(dashboard_html)
-        # 3. Excel por marca — agrupa num ZIP (ex: Todas_as_marcas_individuais_26_02_2026.zip)
+        # 2. Excel por marca — agrupa num ZIP (ex: Todas_as_marcas_individuais_26_02_2026.zip)
         seen = set()
         _marca_files = []
         for a in attachments:
@@ -3807,7 +3802,7 @@ def main() -> None:
                 for a in _marca_files:
                     uniq.append(a)
         send_email(subject, body, uniq)
-        log(f"Email enviado com {len(uniq)} anexo(s): Excel + Dashboard.")
+        log(f"Email enviado com {len(uniq)} anexo(s): Excel (dashboard fica so no repo, ver link no corpo do email).")
         try: shutil.rmtree(_tmp_dir, ignore_errors=True)
         except Exception: pass
     else:

@@ -3766,10 +3766,7 @@ def main() -> None:
     if send:
         import shutil, tempfile
         subject = f"Wells & P&C Online - Daily Monitor Update — {datetime.now(timezone.utc).strftime('%d/%m/%Y')}"
-        # Dashboard deixou de ir em anexo: cresce com o historico completo (>10MB),
-        # o que faz o email ser rejeitado/nao entregue. Fica so no repo, com link.
-        _dashboard_link = "https://htmlpreview.github.io/?https://raw.githubusercontent.com/SofiaSilva1995/wells-online-monitor/main/logs/dashboard_latest.html"
-        body = "\n".join(body_lines).strip() + f"\n\nRelatorios Excel em anexo.\nDashboard atualizado: {_dashboard_link}"
+        body    = "\n".join(body_lines).strip() + "\n\nRelatorios Excel e Dashboard (zip) em anexo."
         uniq = []
         tmp_copies = []
         _tmp_dir = tempfile.mkdtemp()
@@ -3781,7 +3778,19 @@ def main() -> None:
                 uniq.append(dest); tmp_copies.append(dest)
             except Exception:
                 uniq.append(consolidated_xlsx)
-        # 2. Excel por marca — agrupa num ZIP (ex: Todas_as_marcas_individuais_26_02_2026.zip)
+        # 2. Dashboard HTML — vai zipado (o HTML embebe o historico completo e ja
+        # passa os 10MB; zipado fica ~100-150KB porque o conteudo e muito repetitivo)
+        if dashboard_html and os.path.exists(dashboard_html):
+            import zipfile as _zf2
+            _dash_zip_name = f"Dashboard_Update_{_master_date_fmt}.zip"
+            _dash_zip_path = os.path.join(_tmp_dir, _dash_zip_name)
+            try:
+                with _zf2.ZipFile(_dash_zip_path, "w", _zf2.ZIP_DEFLATED, compresslevel=9) as _dzip:
+                    _dzip.write(dashboard_html, os.path.basename(dashboard_html))
+                uniq.append(_dash_zip_path); tmp_copies.append(_dash_zip_path)
+            except Exception as _de:
+                log(f"Erro ao zipar dashboard: {_de}")
+        # 3. Excel por marca — agrupa num ZIP (ex: Todas_as_marcas_individuais_26_02_2026.zip)
         seen = set()
         _marca_files = []
         for a in attachments:
@@ -3802,7 +3811,7 @@ def main() -> None:
                 for a in _marca_files:
                     uniq.append(a)
         send_email(subject, body, uniq)
-        log(f"Email enviado com {len(uniq)} anexo(s): Excel (dashboard fica so no repo, ver link no corpo do email).")
+        log(f"Email enviado com {len(uniq)} anexo(s): Excel + Dashboard (zip).")
         try: shutil.rmtree(_tmp_dir, ignore_errors=True)
         except Exception: pass
     else:

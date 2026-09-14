@@ -3769,10 +3769,11 @@ def main() -> None:
         # e o Gmail bloqueia zips com .html com JavaScript dentro ("552 5.7.0 ... potential
         # security issue"). Um zip com password evita o bloqueio mas fica impossivel de abrir
         # no telemovel (apps de ficheiros por defeito nao abrem zip com password). Por isso
-        # o dashboard fica so no repo (sempre atualizado) e o email manda o link — abre
-        # interativo direto no browser, em qualquer telemovel/PC, sem fricção nenhuma.
+        # o dashboard fica publicado no GitHub Pages (branch gh-pages, atualizado a cada
+        # run pelo workflow) e o email manda o link — abre interativo direto no browser,
+        # em qualquer telemovel/PC, sem fricção nenhuma.
         # Excel completos ficam nos artifacts da run no GitHub Actions (nao vao por email).
-        _dashboard_link = "https://htmlpreview.github.io/?https://raw.githubusercontent.com/SofiaSilva1995/wells-online-monitor/main/logs/dashboard_latest.html"
+        _dashboard_link = "https://sofiasilva1995.github.io/wells-online-monitor/"
         body = ("\n".join(body_lines).strip()
                 + f"\n\nDashboard atualizado: {_dashboard_link}"
                 + "\nExcel completos disponiveis nos artifacts da run no GitHub Actions.")

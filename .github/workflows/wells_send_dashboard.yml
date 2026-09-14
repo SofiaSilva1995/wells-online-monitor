@@ -73,6 +73,29 @@ jobs:
           git pull --rebase origin main
           git push
 
+      - name: Publicar dashboard no GitHub Pages
+        if: always()
+        run: |
+          git config user.name  "Wells Bot"
+          git config user.email "wells-bot@github-actions"
+          if [ ! -f logs/dashboard_latest.html ]; then
+            echo "Sem dashboard novo, nada a publicar."
+            exit 0
+          fi
+          git fetch origin gh-pages
+          rm -rf /tmp/ghpages
+          git worktree add /tmp/ghpages origin/gh-pages
+          cp logs/dashboard_latest.html /tmp/ghpages/index.html
+          cd /tmp/ghpages
+          git config user.name  "Wells Bot"
+          git config user.email "wells-bot@github-actions"
+          git add index.html
+          git diff --staged --quiet && echo "Dashboard sem alteracoes" || \
+            git commit -m "chore: atualiza dashboard $(date +'%Y-%m-%d %H:%M')"
+          git push https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }} HEAD:gh-pages
+          cd "$GITHUB_WORKSPACE"
+          git worktree remove /tmp/ghpages --force
+
       - name: Guardar dashboard como artefacto
         if: always()
         uses: actions/upload-artifact@v4.6.0

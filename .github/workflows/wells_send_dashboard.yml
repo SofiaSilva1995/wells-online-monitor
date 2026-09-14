@@ -70,6 +70,7 @@ jobs:
 
           git diff --staged --quiet && echo "Nada novo para commitar" || \
             git commit -m "chore: run $(date +'%Y-%m-%d %H:%M') — histórico, dashboard e Excel atualizados"
+          git pull --rebase origin main
           git push
 
       - name: Guardar dashboard como artefacto

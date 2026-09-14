@@ -3507,6 +3507,22 @@ def generate_dashboard(run_id: str, all_results: list, output_path: str,
     # Data de hoje (para excluir do hist e usar só current_rows para hoje)
     _today_str = _dt.now().strftime("%d/%m/%Y")
 
+    # Janela do grafico/dashboard: so os ultimos 30 dias. O historico completo
+    # (todos os dias desde o inicio) continua guardado em historico.csv no repo -
+    # isto e so para nao embutir um JSON cada vez maior no HTML. Sem este corte,
+    # o historico crescia ~57KB/dia (desde Fev/2026 ja tinha passado os 11MB no
+    # total) e bloqueava o browser (sobretudo no telemovel) ao trocar de separador
+    # Wells/P&C, porque o JS tinha de filtrar/redesenhar o array completo a cada
+    # clique. Com 30 dias o payload fica ~2MB e estavel (nao cresce mais).
+    from datetime import timedelta as _timedelta
+    _cutoff_dt = _dt.now() - _timedelta(days=30)
+
+    def _parse_dia(d):
+        try:
+            return _dt.strptime(d, "%d/%m/%Y")
+        except Exception:
+            return None
+
     hist_rows_for_chart = []
     for row in hist:
         day = row.get("data", "")
@@ -3514,6 +3530,9 @@ def generate_dashboard(run_id: str, all_results: list, output_path: str,
         key = (day, row.get("marca", ""))
         # Exclui o dia de hoje do histórico — será adicionado via current_rows
         if day == _today_str:
+            continue
+        _day_dt = _parse_dia(day)
+        if _day_dt is not None and _day_dt < _cutoff_dt:
             continue
         # só inclui rows da ultima run desse dia
         if _seen_run_dates.get(key) == run:

@@ -3766,7 +3766,11 @@ def main() -> None:
     if send:
         import shutil, tempfile
         subject = f"Wells & P&C Online - Daily Monitor Update — {datetime.now(timezone.utc).strftime('%d/%m/%Y')}"
-        body    = "\n".join(body_lines).strip() + "\n\nRelatorios Excel e Dashboard (zip) em anexo."
+        _zip_pw = getattr(config_email, "ZIP_PASSWORD", "Wells2026!")
+        body    = ("\n".join(body_lines).strip()
+                   + "\n\nRelatorios Excel e Dashboard (zip) em anexo."
+                   + f"\nO zip do Dashboard esta protegido por password (o Gmail bloqueia .html com"
+                   + f" JavaScript dentro de zips nao protegidos): {_zip_pw}")
         uniq = []
         tmp_copies = []
         _tmp_dir = tempfile.mkdtemp()
@@ -3778,14 +3782,19 @@ def main() -> None:
                 uniq.append(dest); tmp_copies.append(dest)
             except Exception:
                 uniq.append(consolidated_xlsx)
-        # 2. Dashboard HTML — vai zipado (o HTML embebe o historico completo e ja
-        # passa os 10MB; zipado fica ~100-150KB porque o conteudo e muito repetitivo)
+        # 2. Dashboard HTML — vai zipado E com password. Sem password, o Gmail bloqueia
+        # o email com "552 5.7.0 ... potential security issue": o scanner de conteudo abre
+        # o zip, ve um .html com <script> (Chart.js/flatpickr) la dentro e trata como
+        # padrao de phishing. Com password, o Gmail nao consegue inspecionar o conteudo
+        # e deixa passar. (Zipado tambem resolve o limite de 10MB: o historico dentro do
+        # HTML e repetitivo e comprime para ~100-150KB.)
         if dashboard_html and os.path.exists(dashboard_html):
-            import zipfile as _zf2
+            import pyzipper as _zf2
             _dash_zip_name = f"Dashboard_Update_{_master_date_fmt}.zip"
             _dash_zip_path = os.path.join(_tmp_dir, _dash_zip_name)
             try:
-                with _zf2.ZipFile(_dash_zip_path, "w", _zf2.ZIP_DEFLATED, compresslevel=9) as _dzip:
+                with _zf2.AESZipFile(_dash_zip_path, "w", compression=_zf2.ZIP_DEFLATED, encryption=_zf2.WZ_AES) as _dzip:
+                    _dzip.setpassword(_zip_pw.encode("utf-8"))
                     _dzip.write(dashboard_html, os.path.basename(dashboard_html))
                 uniq.append(_dash_zip_path); tmp_copies.append(_dash_zip_path)
             except Exception as _de:

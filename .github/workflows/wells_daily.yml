@@ -29,7 +29,7 @@ jobs:
 
       - name: Instalar dependências
         run: |
-          pip install requests beautifulsoup4 openpyxl playwright pyzipper
+          pip install requests beautifulsoup4 openpyxl playwright
           playwright install chromium
           playwright install-deps chromium
 

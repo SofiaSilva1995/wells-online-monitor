@@ -3764,42 +3764,20 @@ def main() -> None:
         dashboard_html = None
 
     if send:
-        import shutil, tempfile
         subject = f"Wells & P&C Online - Daily Monitor Update — {datetime.now(timezone.utc).strftime('%d/%m/%Y')}"
-        _zip_pw = getattr(config_email, "ZIP_PASSWORD", "Wells2026!")
-        # Os Excel (consolidado e por marca) ja ficam gravados em logs_consolidado/ e
-        # logs_<marca>/, que sobem para os artifacts do GitHub Actions — nao precisam
-        # de ir por email. O email leva so o Dashboard (zip), que e o que o utilizador
-        # consulta no dia-a-dia.
-        body    = ("\n".join(body_lines).strip()
-                   + "\n\nDashboard (zip) em anexo. Excel completos disponiveis nos"
-                   + " artifacts da run no GitHub Actions."
-                   + f"\nO zip do Dashboard esta protegido por password (o Gmail bloqueia .html com"
-                   + f" JavaScript dentro de zips nao protegidos): {_zip_pw}")
-        uniq = []
-        tmp_copies = []
-        _tmp_dir = tempfile.mkdtemp()
-        # Dashboard HTML — vai zipado E com password. Sem password, o Gmail bloqueia
-        # o email com "552 5.7.0 ... potential security issue": o scanner de conteudo abre
-        # o zip, ve um .html com <script> (Chart.js/flatpickr) la dentro e trata como
-        # padrao de phishing. Com password, o Gmail nao consegue inspecionar o conteudo
-        # e deixa passar. (Zipado tambem resolve o limite de 10MB: o historico dentro do
-        # HTML e repetitivo e comprime para ~100-150KB.)
-        if dashboard_html and os.path.exists(dashboard_html):
-            import pyzipper as _zf2
-            _dash_zip_name = f"Dashboard_Update_{_master_date_fmt}.zip"
-            _dash_zip_path = os.path.join(_tmp_dir, _dash_zip_name)
-            try:
-                with _zf2.AESZipFile(_dash_zip_path, "w", compression=_zf2.ZIP_DEFLATED, encryption=_zf2.WZ_AES) as _dzip:
-                    _dzip.setpassword(_zip_pw.encode("utf-8"))
-                    _dzip.write(dashboard_html, os.path.basename(dashboard_html))
-                uniq.append(_dash_zip_path); tmp_copies.append(_dash_zip_path)
-            except Exception as _de:
-                log(f"Erro ao zipar dashboard: {_de}")
-        send_email(subject, body, uniq)
-        log(f"Email enviado com {len(uniq)} anexo(s): Dashboard (zip). Excel ficam nos artifacts do Actions.")
-        try: shutil.rmtree(_tmp_dir, ignore_errors=True)
-        except Exception: pass
+        # Dashboard vai por link, nao por anexo: o HTML tem <script> (Chart.js/flatpickr)
+        # e o Gmail bloqueia zips com .html com JavaScript dentro ("552 5.7.0 ... potential
+        # security issue"). Um zip com password evita o bloqueio mas fica impossivel de abrir
+        # no telemovel (apps de ficheiros por defeito nao abrem zip com password). Por isso
+        # o dashboard fica so no repo (sempre atualizado) e o email manda o link — abre
+        # interativo direto no browser, em qualquer telemovel/PC, sem fricção nenhuma.
+        # Excel completos ficam nos artifacts da run no GitHub Actions (nao vao por email).
+        _dashboard_link = "https://htmlpreview.github.io/?https://raw.githubusercontent.com/SofiaSilva1995/wells-online-monitor/main/logs/dashboard_latest.html"
+        body = ("\n".join(body_lines).strip()
+                + f"\n\nDashboard atualizado: {_dashboard_link}"
+                + "\nExcel completos disponiveis nos artifacts da run no GitHub Actions.")
+        send_email(subject, body, [])
+        log("Email enviado sem anexos (dashboard por link, Excel ficam nos artifacts do Actions).")
     else:
         log("Sem novos OOS (em todas as marcas) - nenhum email enviado.")
 

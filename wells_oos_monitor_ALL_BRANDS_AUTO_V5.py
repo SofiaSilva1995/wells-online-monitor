@@ -3767,22 +3767,19 @@ def main() -> None:
         import shutil, tempfile
         subject = f"Wells & P&C Online - Daily Monitor Update — {datetime.now(timezone.utc).strftime('%d/%m/%Y')}"
         _zip_pw = getattr(config_email, "ZIP_PASSWORD", "Wells2026!")
+        # Os Excel (consolidado e por marca) ja ficam gravados em logs_consolidado/ e
+        # logs_<marca>/, que sobem para os artifacts do GitHub Actions — nao precisam
+        # de ir por email. O email leva so o Dashboard (zip), que e o que o utilizador
+        # consulta no dia-a-dia.
         body    = ("\n".join(body_lines).strip()
-                   + "\n\nRelatorios Excel e Dashboard (zip) em anexo."
+                   + "\n\nDashboard (zip) em anexo. Excel completos disponiveis nos"
+                   + " artifacts da run no GitHub Actions."
                    + f"\nO zip do Dashboard esta protegido por password (o Gmail bloqueia .html com"
                    + f" JavaScript dentro de zips nao protegidos): {_zip_pw}")
         uniq = []
         tmp_copies = []
         _tmp_dir = tempfile.mkdtemp()
-        # 1. Excel consolidado — nome correcto (ex: Consolidado_26_02_2026.xlsx)
-        if consolidated_xlsx and os.path.exists(consolidated_xlsx):
-            try:
-                dest = os.path.join(_tmp_dir, os.path.basename(consolidated_xlsx))
-                shutil.copy2(consolidated_xlsx, dest)
-                uniq.append(dest); tmp_copies.append(dest)
-            except Exception:
-                uniq.append(consolidated_xlsx)
-        # 2. Dashboard HTML — vai zipado E com password. Sem password, o Gmail bloqueia
+        # Dashboard HTML — vai zipado E com password. Sem password, o Gmail bloqueia
         # o email com "552 5.7.0 ... potential security issue": o scanner de conteudo abre
         # o zip, ve um .html com <script> (Chart.js/flatpickr) la dentro e trata como
         # padrao de phishing. Com password, o Gmail nao consegue inspecionar o conteudo
@@ -3799,28 +3796,8 @@ def main() -> None:
                 uniq.append(_dash_zip_path); tmp_copies.append(_dash_zip_path)
             except Exception as _de:
                 log(f"Erro ao zipar dashboard: {_de}")
-        # 3. Excel por marca — agrupa num ZIP (ex: Todas_as_marcas_individuais_26_02_2026.zip)
-        seen = set()
-        _marca_files = []
-        for a in attachments:
-            if a and a not in seen and os.path.exists(a):
-                seen.add(a)
-                _marca_files.append(a)
-        if _marca_files:
-            import zipfile as _zf
-            _zip_name = f"todas_as_marcas_individuais_{_master_date_fmt}.zip"
-            _zip_path = os.path.join(_tmp_dir, _zip_name)
-            try:
-                with _zf.ZipFile(_zip_path, "w", _zf.ZIP_DEFLATED) as _zzip:
-                    for a in _marca_files:
-                        _zzip.write(a, os.path.basename(a))
-                uniq.append(_zip_path); tmp_copies.append(_zip_path)
-            except Exception as _ze:
-                log(f"Erro ao criar ZIP das marcas: {_ze}")
-                for a in _marca_files:
-                    uniq.append(a)
         send_email(subject, body, uniq)
-        log(f"Email enviado com {len(uniq)} anexo(s): Excel + Dashboard (zip).")
+        log(f"Email enviado com {len(uniq)} anexo(s): Dashboard (zip). Excel ficam nos artifacts do Actions.")
         try: shutil.rmtree(_tmp_dir, ignore_errors=True)
         except Exception: pass
     else:

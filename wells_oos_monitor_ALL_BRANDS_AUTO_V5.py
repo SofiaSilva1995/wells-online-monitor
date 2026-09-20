@@ -3793,9 +3793,9 @@ def main() -> None:
         # em qualquer telemovel/PC, sem fricção nenhuma.
         # Excel completos ficam nos artifacts da run no GitHub Actions (nao vao por email).
         _dashboard_link = "https://sofiasilva1995.github.io/wells-online-monitor/"
-        body = ("\n".join(body_lines).strip()
-                + f"\n\nDashboard atualizado: {_dashboard_link}"
-                + "\nExcel completos disponiveis nos artifacts da run no GitHub Actions.")
+        body = (f"Dashboard atualizado: {_dashboard_link}\n\n"
+                + "\n".join(body_lines).strip()
+                + "\n\nExcel completos disponiveis nos artifacts da run no GitHub Actions.")
         send_email(subject, body, [])
         log("Email enviado sem anexos (dashboard por link, Excel ficam nos artifacts do Actions).")
     else:

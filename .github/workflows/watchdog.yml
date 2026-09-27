@@ -1,0 +1,57 @@
+name: Wells - Cao de Guarda
+
+# Verifica todos os dias se o Daily Run teve sucesso nas ultimas 30h.
+# Se nao teve (falhou, nao correu, ou o schedule foi desativado), envia alerta por email.
+
+on:
+  schedule:
+    - cron: '0 12 * * *'   # 12:00 UTC, bem depois do Daily Run (~07:00)
+  workflow_dispatch:
+
+permissions:
+  actions: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verificar ultima run bem-sucedida
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          REPO: ${{ github.repository }}
+        run: |
+          python3 - << 'PYEOF'
+          import os, json, smtplib, urllib.request
+          from datetime import datetime, timedelta, timezone
+          from email.message import EmailMessage
+
+          repo = os.environ["REPO"]
+          url = (f"https://api.github.com/repos/{repo}/actions/workflows/wells_daily.yml/runs"
+                 "?status=success&per_page=1")
+          req = urllib.request.Request(url, headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}"})
+          runs = json.load(urllib.request.urlopen(req))["workflow_runs"]
+
+          last = datetime.fromisoformat(runs[0]["created_at"].replace("Z", "+00:00")) if runs else None
+          limite = datetime.now(timezone.utc) - timedelta(hours=30)
+          if last and last > limite:
+              print(f"OK - ultima run com sucesso: {last}")
+              raise SystemExit(0)
+
+          msg = EmailMessage()
+          msg["Subject"] = "[ALERTA] Wells Monitor sem runs com sucesso ha mais de 30h"
+          msg["From"] = os.environ["SMTP_USER"]
+          msg["To"] = os.environ["EMAIL_TO"]
+          msg.set_content(
+              f"Ultima run com sucesso: {last or 'nenhuma encontrada'}\n\n"
+              f"Ver: https://github.com/{repo}/actions/workflows/wells_daily.yml\n"
+          )
+          with smtplib.SMTP("smtp.gmail.com", 587) as s:
+              s.starttls()
+              s.login(os.environ["SMTP_USER"], os.environ["SMTP_PASS"])
+              s.send_message(msg)
+          print("Alerta enviado.")
+          raise SystemExit(1)
+          PYEOF

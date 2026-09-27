@@ -23,7 +23,7 @@ jobs:
       - name: Checkout repositório
         uses: actions/checkout@v4.2.2
         with:
-          token: ${{ secrets.PAT_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Python
         uses: actions/setup-python@v5.3.0
@@ -63,7 +63,7 @@ jobs:
         run: |
           git config user.name  "Wells Bot"
           git config user.email "wells-bot@github-actions"
-          git remote set-url origin https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }}
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
 
           git add logs/ 2>/dev/null || true
           git add known_oos_*.json 2>/dev/null || true
@@ -92,7 +92,7 @@ jobs:
           git add index.html
           git diff --staged --quiet && echo "Dashboard sem alteracoes" || \
             git commit -m "chore: atualiza dashboard $(date +'%Y-%m-%d %H:%M')"
-          git push https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.repository }} HEAD:gh-pages
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:gh-pages
           cd "$GITHUB_WORKSPACE"
           git worktree remove /tmp/ghpages --force
 
@@ -106,3 +106,30 @@ jobs:
             logs_consolidado/
             logs_*/
           retention-days: 7
+
+      - name: Alerta por email se a run falhou
+        if: failure()
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          WORKFLOW: ${{ github.workflow }}
+        run: |
+          python3 - << 'PYEOF'
+          import os, smtplib
+          from email.message import EmailMessage
+          msg = EmailMessage()
+          msg["Subject"] = f"[ALERTA] Wells Monitor FALHOU - {os.environ['WORKFLOW']}"
+          msg["From"] = os.environ["SMTP_USER"]
+          msg["To"] = os.environ["EMAIL_TO"]
+          msg.set_content(
+              "A run do Wells Online Monitor falhou e o email normal pode nao ter sido enviado.\n\n"
+              f"Ver detalhes: {os.environ['RUN_URL']}\n"
+          )
+          with smtplib.SMTP("smtp.gmail.com", 587) as s:
+              s.starttls()
+              s.login(os.environ["SMTP_USER"], os.environ["SMTP_PASS"])
+              s.send_message(msg)
+          print("Email de alerta enviado.")
+          PYEOF
